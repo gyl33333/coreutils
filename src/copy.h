@@ -21,6 +21,31 @@
 
 # include <stdbool.h>
 # include "hash.h"
+#define NONE                 "\e[0m"
+#define BLACK                "\e[0;30m"
+#define L_BLACK              "\e[1;30m"
+#define RED                  "\e[0;31m"
+#define L_RED                "\e[1;31m"
+#define GREEN                "\e[0;32m"
+#define L_GREEN              "\e[1;32m"
+#define BROWN                "\e[0;33m"
+#define YELLOW               "\e[1;33m"
+#define BLUE                 "\e[0;34m"
+#define L_BLUE               "\e[1;34m"
+#define PURPLE               "\e[0;35m"
+#define L_PURPLE             "\e[1;35m"
+#define CYAN                 "\e[0;36m"
+#define L_CYAN               "\e[1;36m"
+#define GRAY                 "\e[0;37m"
+#define WHITE                "\e[1;37m"
+
+#define BOLD                 "\e[1m"
+#define UNDERLINE            "\e[4m"
+#define BLINK                "\e[5m"
+#define REVERSE              "\e[7m"
+#define HIDE                 "\e[8m"
+#define CLEAR                "\e[2J"
+#define CLRLINE              "\r\e[K" //or "\e[1K\r"
 
 /* Control creation of sparse files (files with holes).  */
 enum Sparse_type
@@ -227,6 +252,9 @@ struct cp_options
   /* If true, create symbolic links instead of copying files.
      Create destination directories as usual. */
   bool symbolic_link;
+  
+  /* If true, draw a nice progress bar on screen */
+  bool progress_bar;
 
   /* If true, do not copy a nondirectory that has an existing destination
      with the same or newer modification time. */
@@ -285,5 +313,16 @@ void src_info_init (struct cp_options *);
 void cp_options_default (struct cp_options *);
 bool chown_failure_ok (struct cp_options const *) _GL_ATTRIBUTE_PURE;
 mode_t cached_umask (void);
+
+/* BEGIN progress mod */
+int file_size_format ( char * _cDst, int _iSize, int _iCounter );
+
+long g_iTotalSize;
+long g_iTotalWritten;
+int g_iFilesCopied;
+struct timeval g_oStartTime;
+int g_iTotalFiles;
+bool progress;
+/* END progress mod */
 
 #endif

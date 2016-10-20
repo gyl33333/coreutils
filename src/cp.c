@@ -141,6 +141,7 @@ static struct option const long_opts[] =
   {"target-directory", required_argument, NULL, 't'},
   {"update", no_argument, NULL, 'u'},
   {"verbose", no_argument, NULL, 'v'},
+  {"progress-bar", no_argument, NULL, 'g'},
   {GETOPT_HELP_OPTION_DECL},
   {GETOPT_VERSION_OPTION_DECL},
   {NULL, 0, NULL, 0}
@@ -178,6 +179,7 @@ Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.\n\
   -f, --force                  if an existing destination file cannot be\n\
                                  opened, remove it and try again (this option\n\
                                  is ignored when the -n option is also used)\n\
+  -g, --progress-bar           add progress-bar\n\
   -i, --interactive            prompt before overwrite (overrides a previous -n\
 \n\
                                   option)\n\
@@ -617,6 +619,57 @@ do_copy (int n_files, char **file, const char *target_directory,
         error (EXIT_FAILURE, 0, _("target %s is not a directory"),
                quote (file[n_files - 1]));
     }
+    
+  /* BEGIN progress mod */
+  struct timeval start_time;
+  if (progress) {
+    g_iTotalSize = 0;
+    g_iFilesCopied = 0;
+    g_iTotalWritten = 0;
+
+    /* save time */
+    gettimeofday ( & start_time, NULL );
+    g_oStartTime = start_time;
+
+    printf ( "Calculating total size... \r" );
+    fflush ( stdout );
+    long iTotalSize = 0;
+    int iFiles = n_files;
+    if ( ! target_directory )
+      iFiles = n_files - 1;
+    int j;
+    for (j = 0; j < iFiles; j++)
+    {
+      /* call du -s for each file */
+      /* create command */
+      char command[1024];
+      sprintf ( command, "du -s \"%s\"", file[j] );
+      /* TODO: replace all quote signs in file[i] */
+
+      FILE *fp;
+      char output[1024];
+
+      /* run command */
+      fp = popen(command, "r");
+      if (fp == NULL || fgets(output, sizeof(output)-1, fp) == NULL) {
+        printf("failed to run du.\n" );
+      }
+      else
+      {
+        /* isolate size */
+        strchr ( output, '\t' )[0] = '\0';
+        iTotalSize += atol ( output );
+
+        printf ( "Calculating total size... %ld\r", iTotalSize );
+        fflush ( stdout );
+      }
+
+      /* close */
+      pclose(fp);
+    }
+    g_iTotalSize = iTotalSize;
+  }
+  /* END progress mod */
 
   if (target_directory)
     {
@@ -759,6 +812,46 @@ do_copy (int n_files, char **file, const char *target_directory,
 
       ok = copy (source, new_dest, 0, x, &unused, NULL);
     }
+    
+  /* BEGIN progress mod */
+  if (progress) {
+    /* remove everything */
+    int i;
+    if ( g_iTotalSize )
+    {
+      for ( i = 0; i < 6; i++ )
+        printf ( "\033[K\n" );
+      printf ( "\r\033[6A" );
+    }
+    else
+    {
+      for ( i = 0; i < 3; i++ )
+        printf ( "\033[K\n" );
+      printf ( "\r\033[3A" );
+    }
+
+    /* save time */
+    struct timeval end_time;
+    gettimeofday ( & end_time, NULL );
+    int usec_elapsed = end_time.tv_usec - start_time.tv_usec;
+    double sec_elapsed = ( double ) usec_elapsed / 1000000.f;
+    sec_elapsed += ( double ) ( end_time.tv_sec - start_time.tv_sec );
+
+    /* get total size */
+    char sTotalWritten[20];
+    file_size_format ( sTotalWritten, g_iTotalSize, 1 );
+    /* TODO: using g_iTotalWritten would be more correct, but is less accurate */
+
+    /* calculate speed */
+    int copy_speed = ( int ) ( ( double ) g_iTotalWritten / sec_elapsed );
+    char s_copy_speed[20];
+    file_size_format ( s_copy_speed, copy_speed, 1 );
+
+    /* good-bye message */
+    printf ( "%d files (%s) copied in %.1f seconds (%s/s).\n", g_iFilesCopied, sTotalWritten,
+             sec_elapsed, s_copy_speed );
+  }
+  /* END progress mod */
 
   return ok;
 }
@@ -793,6 +886,7 @@ cp_option_init (struct cp_options *x)
   x->recursive = false;
   x->sparse_mode = SPARSE_AUTO;
   x->symbolic_link = false;
+  x->progress_bar = false;
   x->set_mode = false;
   x->mode = 0;
 
@@ -933,7 +1027,7 @@ main (int argc, char **argv)
      we'll actually use backup_suffix_string.  */
   backup_suffix_string = getenv ("SIMPLE_BACKUP_SUFFIX");
 
-  while ((c = getopt_long (argc, argv, "abdfHilLnprst:uvxPRS:T",
+  while ((c = getopt_long (argc, argv, "abdfgHilLnprst:uvxPRS:T",
                            long_opts, NULL))
          != -1)
     {
@@ -988,6 +1082,10 @@ main (int argc, char **argv)
 
         case 'f':
           x.unlink_dest_after_failed_open = true;
+          break;
+
+        case 'g':
+          progress = true;
           break;
 
         case 'H':

@@ -64,6 +64,7 @@ static struct option const long_options[] =
   {"target-directory", required_argument, NULL, 't'},
   {"update", no_argument, NULL, 'u'},
   {"verbose", no_argument, NULL, 'v'},
+  {"progress-bar", no_argument, NULL, 'g'},
   {GETOPT_HELP_OPTION_DECL},
   {GETOPT_VERSION_OPTION_DECL},
   {NULL, 0, NULL, 0}
@@ -165,7 +166,7 @@ do_move (const char *source, const char *dest, const struct cp_options *x)
   bool copy_into_self;
   bool rename_succeeded;
   bool ok = copy (source, dest, false, x, &copy_into_self, &rename_succeeded);
-
+  
   if (ok)
     {
       char const *dir_to_remove;
@@ -300,6 +301,7 @@ Rename SOURCE to DEST, or move SOURCE(s) to DIRECTORY.\n\
 \n\
   -b                           like --backup but does not accept an argument\n\
   -f, --force                  do not prompt before overwriting\n\
+  -g, --progress-bar           add progress-bar\n\
   -i, --interactive            prompt before overwrite\n\
   -n, --no-clobber             do not overwrite an existing file\n\
 If you specify more than one of -i, -f, -n, only the final one takes effect.\n\
@@ -368,7 +370,7 @@ main (int argc, char **argv)
      we'll actually use backup_suffix_string.  */
   backup_suffix_string = getenv ("SIMPLE_BACKUP_SUFFIX");
 
-  while ((c = getopt_long (argc, argv, "bfint:uvS:T", long_options, NULL))
+  while ((c = getopt_long (argc, argv, "bfint:uvgS:T", long_options, NULL))
          != -1)
     {
       switch (c)
@@ -413,6 +415,9 @@ main (int argc, char **argv)
           break;
         case 'v':
           x.verbose = true;
+          break;
+        case 'g':
+          progress = true;
           break;
         case 'S':
           make_backups = true;
@@ -476,6 +481,57 @@ main (int argc, char **argv)
                    : no_backups);
 
   hash_init ();
+  
+  /* BEGIN progress mod */
+  struct timeval start_time;
+
+  if(progress) {
+    g_iTotalSize = 0;
+    g_iFilesCopied = 0;
+    g_iTotalWritten = 0;
+
+    gettimeofday (& start_time, NULL);
+    g_oStartTime = start_time;
+
+    printf ("Calculating total size... \r");
+    fflush (stdout);
+    long iTotalSize = 0;
+    int iFiles = n_files;
+    if ( !target_directory )
+      iFiles = 1;
+    int j;
+    for (j = 0; j < iFiles; j++)
+    {
+      /* call du -s for each file */
+      /* create command */
+      char command[1024];
+      sprintf ( command, "du -s \"%s\"", file[j] );
+      /* TODO: replace all quote signs in file[i] */
+
+      FILE *fp;
+      char output[1024];
+
+      /* run command */
+      fp = popen(command, "r");
+      if (fp == NULL || fgets(output, sizeof(output)-1, fp) == NULL) {
+        printf("failed to run du.\n" );
+      }
+      else
+      {
+        /* isolate size */
+        strchr ( output, '\t' )[0] = '\0';
+        iTotalSize += atol ( output );
+
+        printf ( "Calculating total size... %ld\r", iTotalSize );
+        fflush ( stdout );
+      }
+
+      /* close */
+      pclose(fp);
+    }
+    g_iTotalSize = iTotalSize;
+  }
+  /* END progress mod */
 
   if (target_directory)
     {
@@ -493,6 +549,46 @@ main (int argc, char **argv)
     }
   else
     ok = movefile (file[0], file[1], false, &x);
+  
+  /* BEGIN progress mod */
+  if (progress) {
+    /* remove everything */
+    int i;
+    if ( g_iTotalSize )
+    {
+      for ( i = 0; i < 6; i++ )
+        printf ( "\033[K\n" );
+      printf ( "\r\033[6A" );
+    }
+    else
+    {
+      for ( i = 0; i < 3; i++ )
+        printf ( "\033[K\n" );
+      printf ( "\r\033[3A" );
+    }
+
+    /* save time */
+    struct timeval end_time;
+    gettimeofday ( & end_time, NULL );
+    int usec_elapsed = end_time.tv_usec - start_time.tv_usec;
+    double sec_elapsed = ( double ) usec_elapsed / 1000000.f;
+    sec_elapsed += ( double ) ( end_time.tv_sec - start_time.tv_sec );
+
+    /* get total size */
+    char sTotalWritten[20];
+    file_size_format ( sTotalWritten, g_iTotalSize, 1 );
+    /* TODO: using g_iTotalWritten would be more correct, but is less accurate */
+
+    /* calculate speed */
+    int copy_speed = ( int ) ( ( double ) g_iTotalWritten / sec_elapsed );
+    char s_copy_speed[20];
+    file_size_format ( s_copy_speed, copy_speed, 1 );
+
+    /* good-bye message */
+    printf ( "%d files (%s) moved in %.1f seconds (%s/s).\n", g_iFilesCopied, sTotalWritten,
+             sec_elapsed, s_copy_speed );
+  }
+  /* END progress mod */
 
   exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
 }
