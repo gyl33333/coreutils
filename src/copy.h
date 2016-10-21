@@ -315,9 +315,9 @@ bool chown_failure_ok (struct cp_options const *) _GL_ATTRIBUTE_PURE;
 mode_t cached_umask (void);
 
 /* BEGIN progress mod */
-int file_size_format ( char * _cDst, int _iSize, int _iCounter );
+int file_size_format ( char * _cDst, long long int _iSize, int _iCounter );
 
-long g_iTotalSize;
+long long int g_iTotalSize;
 long g_iTotalWritten;
 int g_iFilesCopied;
 struct timeval g_oStartTime;

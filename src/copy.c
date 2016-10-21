@@ -136,11 +136,11 @@ utimens_symlink (char const *file, struct timespec const *timespec)
 }
 
 /* BEGIN progress mod */
-static void file_progress_bar ( char * _cDest, int _iBarLength, int _iProgress, int _iTotal )
+static void file_progress_bar ( char * _cDest, int _iBarLength, long long int _iProgress, long long int _iTotal )
 {
   // write number to progress bar
-  float fPercent = ( float ) _iProgress / ( float ) _iTotal * 100.f;
-  sprintf ( _cDest + ( _iBarLength - 6 ), "%4.1f", fPercent );
+ long  double fPercent = ( long double) _iProgress / ( long double) _iTotal * 100.f;
+  sprintf ( _cDest + ( _iBarLength - 6 ), "%4.1LF", fPercent );
   // remove zero
   _cDest[_iBarLength - 2] = ' ';
 
@@ -148,14 +148,14 @@ static void file_progress_bar ( char * _cDest, int _iBarLength, int _iProgress, 
   int i;
   for ( i = 1; i <= _iBarLength - 9; i++ )
   {
-    if ( fPercent > ( float ) ( i - 1 ) / ( _iBarLength - 10 ) * 100.f )
+    if ( fPercent >= (long double) ( i - 1 ) / ( _iBarLength - 10 ) * 100.f )
       _cDest[i] = '#';
     else
       _cDest[i] = '-';
   }
 }
 
-int file_size_format ( char * _cDst, int _iSize, int _iCounter )
+int file_size_format ( char * _cDst, long long int _iSize, int _iCounter )
 {
   int iCounter = _iCounter;
   double dSize = ( double ) _iSize;
@@ -166,7 +166,7 @@ int file_size_format ( char * _cDst, int _iSize, int _iCounter )
   }
 
   /* get unit */
-  char  sUnit[1024];
+  char  sUnit[10];
   if ( iCounter == 0 )
     sprintf(sUnit, "B");
   else if ( iCounter == 1 )
@@ -252,7 +252,7 @@ sparse_copy (int src_fd, int dest_fd, char *buf, size_t buf_size,
   cProgressField[4][fn_length] = ' ';
 
   /* filesize */
-  int file_size = max_n_read;
+  uintmax_t file_size = max_n_read;
   struct stat file_stat;
   if (fstat(src_fd, & file_stat) == 0)
     file_size = file_stat.st_size;
@@ -267,9 +267,9 @@ sparse_copy (int src_fd, int dest_fd, char *buf, size_t buf_size,
   sProgressBar[iBarLength - 1] = '%';
 
   /* this will always save the time in between */
-  struct timeval last_time;
-  gettimeofday ( & last_time, NULL );
-  int last_size = g_iTotalWritten;
+  /* struct timeval last_time; */
+  /* gettimeofday ( & last_time, NULL ); */
+  /* int last_size = g_iTotalWritten; */
   /* END progress mod */
   
   *last_write_made_hole = false;
@@ -299,34 +299,38 @@ sparse_copy (int src_fd, int dest_fd, char *buf, size_t buf_size,
       if ( iCountDown == 0 )
       {
         /* calculate current speed */
-        struct timeval cur_time;
-        gettimeofday ( & cur_time, NULL );
-        int cur_size = g_iTotalWritten + *total_n_read / 1024;
-        int usec_elapsed = cur_time.tv_usec - last_time.tv_usec;
-        double sec_elapsed = ( double ) usec_elapsed / 1000000.f;
-        sec_elapsed += ( double ) ( cur_time.tv_sec - last_time.tv_sec );
-        int copy_speed = ( int ) ( ( double ) ( cur_size - last_size )
-          / sec_elapsed );
-        if (copy_speed < 0)
-          copy_speed = 0;
+/*
+ *         struct timeval cur_time;
+ *         gettimeofday ( & cur_time, NULL );
+ *         int cur_size = g_iTotalWritten + *total_n_read / 1024;
+ *         int usec_elapsed = cur_time.tv_usec - last_time.tv_usec;
+ *         double sec_elapsed = ( double ) usec_elapsed / 1000000.f;
+ *         sec_elapsed += ( double ) ( cur_time.tv_sec - last_time.tv_sec );
+ *         int copy_speed = ( int ) ( ( double ) ( cur_size - last_size )
+ *           / sec_elapsed );
+ *         if (copy_speed < 0)
+ *           copy_speed = 0;
+ *         char s_copy_speed[20];
+ *         file_size_format ( s_copy_speed, copy_speed, 1 );
+ * 
+ */
+        /* update vars */
 	/*
-         * char s_copy_speed[20];
-         * file_size_format ( s_copy_speed, copy_speed, 1 );
+         * last_time = cur_time;
+         * last_size = cur_size;
 	 */
 
-        /* update vars */
-        last_time = cur_time;
-        last_size = cur_size;
-
         /* how much time has passed since the start? */
-        int isec_elapsed = cur_time.tv_sec - g_oStartTime.tv_sec;
-        int sec_remaining = ( int ) ( ( double ) isec_elapsed / cur_size
-          * g_iTotalSize ) - isec_elapsed;
-        int min_remaining = sec_remaining / 60;
-        sec_remaining -= min_remaining * 60;
-        int hours_remaining = min_remaining / 60;
-        min_remaining -= hours_remaining * 60;
-        /* print out */
+	/*
+         * int isec_elapsed = cur_time.tv_sec - g_oStartTime.tv_sec;
+         * int sec_remaining = ( int ) ( ( double ) isec_elapsed / cur_size
+         *   * g_iTotalSize ) - isec_elapsed;
+         * int min_remaining = sec_remaining / 60;
+         * sec_remaining -= min_remaining * 60;
+         * int hours_remaining = min_remaining / 60;
+         * min_remaining -= hours_remaining * 60;
+         * [> print out <]
+	 */
 
 /*
  *         sprintf ( cProgressField[3],
@@ -357,15 +361,15 @@ sparse_copy (int src_fd, int dest_fd, char *buf, size_t buf_size,
         /* print the field */
         for ( it = g_iTotalSize ? 0 : 3; it < 6; it++ )
         {
-          printf ( "\033[K%s\n" YELLOW, cProgressField[it] );
+	  printf ( "\033[K%s\n" YELLOW, cProgressField[it] );
           /* if ( strlen ( cProgressField[it] ) < iBarLength ) */
             /* printf ( "" ); */
         }
-        if ( g_iTotalSize )
-          printf ( "\r\033[6A" );
-        else
-          printf ( "\r\033[3A" );
-        fflush ( stdout );
+	if ( g_iTotalSize )
+	  printf ( "\r\033[6A" );
+	else
+	  printf ( "\r\033[3A" );
+	fflush ( stdout );
       }
     }
     /* END progress mod */
