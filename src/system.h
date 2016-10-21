@@ -24,7 +24,7 @@
 
 #if 2 < __GLIBC__ || ( 2 == ___GLIBC__ && 2 <= __GLIBC_MINOR__ )
 # if ! defined _SYS_TYPES_H
-you must include <sys/types.h> before including this file
+you must include < sys / types.h > before including this file
 # endif
 #endif
 
@@ -94,12 +94,11 @@ you must include <sys/types.h> before including this file
 #include "version.h"
 
 /* Exit statuses for programs like 'env' that exec other programs.  */
-enum
-{
-  EXIT_TIMEDOUT = 124, /* Time expired before child completed.  */
-  EXIT_CANCELED = 125, /* Internal error prior to exec attempt.  */
-  EXIT_CANNOT_INVOKE = 126, /* Program located, but not usable.  */
-  EXIT_ENOENT = 127 /* Could not find program to exec.  */
+enum {
+	EXIT_TIMEDOUT = 124, /* Time expired before child completed.  */
+	EXIT_CANCELED = 125, /* Internal error prior to exec attempt.  */
+	EXIT_CANNOT_INVOKE = 126, /* Program located, but not usable.  */
+	EXIT_ENOENT = 127 /* Could not find program to exec.  */
 };
 
 #include "exitfail.h"
@@ -108,8 +107,8 @@ enum
 static inline void
 initialize_exit_failure (int status)
 {
-  if (status != EXIT_FAILURE)
-    exit_failure = status;
+	if (status != EXIT_FAILURE)
+		exit_failure = status;
 }
 
 #include <fcntl.h>
@@ -119,9 +118,8 @@ initialize_exit_failure (int status)
 # define _D_EXACT_NAMLEN(dp) strlen ((dp)->d_name)
 #endif
 
-enum
-{
-  NOT_AN_INODE_NUMBER = 0
+enum {
+	NOT_AN_INODE_NUMBER = 0
 };
 
 #ifdef D_INO_IN_DIRENT
@@ -158,7 +156,10 @@ enum
 /* Convert a possibly-signed character to an unsigned character.  This is
    a bit safer than casting to unsigned char, since it catches some type
    errors that the cast doesn't.  */
-static inline unsigned char to_uchar (char ch) { return ch; }
+static inline unsigned char to_uchar (char ch)
+{
+	return ch;
+}
 
 #include <locale.h>
 
@@ -180,10 +181,10 @@ static inline unsigned char to_uchar (char ch) { return ch; }
 static inline unsigned long int
 select_plural (uintmax_t n)
 {
-  /* Reduce by a power of ten, but keep it away from zero.  The
-     gettext manual says 1000000 should be safe.  */
-  enum { PLURAL_REDUCER = 1000000 };
-  return (n <= ULONG_MAX ? n : n % PLURAL_REDUCER + PLURAL_REDUCER);
+	/* Reduce by a power of ten, but keep it away from zero.  The
+	   gettext manual says 1000000 should be safe.  */
+	enum { PLURAL_REDUCER = 1000000 };
+	return (n <= ULONG_MAX ? n : n % PLURAL_REDUCER + PLURAL_REDUCER);
 }
 
 #define STREQ(a, b) (strcmp (a, b) == 0)
@@ -263,55 +264,51 @@ uid_t getuid ();
 static inline bool
 dot_or_dotdot (char const *file_name)
 {
-  if (file_name[0] == '.')
-    {
-      char sep = file_name[(file_name[1] == '.') + 1];
-      return (! sep || ISSLASH (sep));
-    }
-  else
-    return false;
+	if (file_name[0] == '.') {
+		char sep = file_name[(file_name[1] == '.') + 1];
+		return (! sep || ISSLASH (sep));
+	} else
+		return false;
 }
 
 /* A wrapper for readdir so that callers don't see entries for '.' or '..'.  */
 static inline struct dirent const *
 readdir_ignoring_dot_and_dotdot (DIR *dirp)
 {
-  while (1)
-    {
-      struct dirent const *dp = readdir (dirp);
-      if (dp == NULL || ! dot_or_dotdot (dp->d_name))
-        return dp;
-    }
+	while (1) {
+		struct dirent const *dp = readdir (dirp);
+		if (dp == NULL || ! dot_or_dotdot (dp->d_name))
+			return dp;
+	}
 }
 
 /* Return true if DIR is determined to be an empty directory.  */
 static inline bool
 is_empty_dir (int fd_cwd, char const *dir)
 {
-  DIR *dirp;
-  struct dirent const *dp;
-  int saved_errno;
-  int fd = openat (fd_cwd, dir,
-                   (O_RDONLY | O_DIRECTORY
-                    | O_NOCTTY | O_NOFOLLOW | O_NONBLOCK));
+	DIR *dirp;
+	struct dirent const *dp;
+	int saved_errno;
+	int fd = openat (fd_cwd, dir,
+					 (O_RDONLY | O_DIRECTORY
+					  | O_NOCTTY | O_NOFOLLOW | O_NONBLOCK));
 
-  if (fd < 0)
-    return false;
+	if (fd < 0)
+		return false;
 
-  dirp = fdopendir (fd);
-  if (dirp == NULL)
-    {
-      close (fd);
-      return false;
-    }
+	dirp = fdopendir (fd);
+	if (dirp == NULL) {
+		close (fd);
+		return false;
+	}
 
-  errno = 0;
-  dp = readdir_ignoring_dot_and_dotdot (dirp);
-  saved_errno = errno;
-  closedir (dirp);
-  if (dp != NULL)
-    return false;
-  return saved_errno == 0 ? true : false;
+	errno = 0;
+	dp = readdir_ignoring_dot_and_dotdot (dirp);
+	saved_errno = errno;
+	closedir (dirp);
+	if (dp != NULL)
+		return false;
+	return saved_errno == 0 ? true : false;
 }
 
 /* Factor out some of the common --help and --version processing code.  */
@@ -319,10 +316,9 @@ is_empty_dir (int fd_cwd, char const *dir)
 /* These enum values cannot possibly conflict with the option values
    ordinarily used by commands, including CHAR_MAX + 1, etc.  Avoid
    CHAR_MIN - 1, as it may equal -1, the getopt end-of-options value.  */
-enum
-{
-  GETOPT_HELP_CHAR = (CHAR_MIN - 2),
-  GETOPT_VERSION_CHAR = (CHAR_MIN - 3)
+enum {
+	GETOPT_HELP_CHAR = (CHAR_MIN - 2),
+	GETOPT_VERSION_CHAR = (CHAR_MIN - 3)
 };
 
 #define GETOPT_HELP_OPTION_DECL \
@@ -462,15 +458,13 @@ enum
 static inline size_t _GL_ATTRIBUTE_CONST
 gcd (size_t u, size_t v)
 {
-  do
-    {
-      size_t t = u % v;
-      u = v;
-      v = t;
-    }
-  while (v);
+	do {
+		size_t t = u % v;
+		u = v;
+		v = t;
+	} while (v);
 
-  return u;
+	return u;
 }
 
 /* Compute the least common multiple of U and V.  U and V must be
@@ -480,7 +474,7 @@ gcd (size_t u, size_t v)
 static inline size_t _GL_ATTRIBUTE_CONST
 lcm (size_t u, size_t v)
 {
-  return u * (v / gcd (u, v));
+	return u * (v / gcd (u, v));
 }
 
 /* Return PTR, aligned upward to the next multiple of ALIGNMENT.
@@ -491,9 +485,9 @@ lcm (size_t u, size_t v)
 static inline void *
 ptr_align (void const *ptr, size_t alignment)
 {
-  char const *p0 = ptr;
-  char const *p1 = p0 + alignment - 1;
-  return (void *) (p1 - (size_t) p1 % alignment);
+	char const *p0 = ptr;
+	char const *p1 = p0 + alignment - 1;
+	return (void *) (p1 - (size_t) p1 % alignment);
 }
 
 /* Return whether the buffer consists entirely of NULs.
@@ -502,19 +496,19 @@ ptr_align (void const *ptr, size_t alignment)
 static inline bool _GL_ATTRIBUTE_PURE
 is_nul (const char *buf, size_t bufsize)
 {
-  typedef uintptr_t word;
+	typedef uintptr_t word;
 
-  /* Find first nonzero *word*, or the word with the sentinel.  */
-  word *wp = (word *) buf;
-  while (*wp++ == 0)
-    continue;
+	/* Find first nonzero *word*, or the word with the sentinel.  */
+	word *wp = (word *) buf;
+	while (*wp++ == 0)
+		continue;
 
-  /* Find the first nonzero *byte*, or the sentinel.  */
-  char *cp = (char *) (wp - 1);
-  while (*cp++ == 0)
-    continue;
+	/* Find the first nonzero *byte*, or the sentinel.  */
+	char *cp = (char *) (wp - 1);
+	while (*cp++ == 0)
+		continue;
 
-  return cp > buf + bufsize;
+	return cp > buf + bufsize;
 }
 
 /* If 10*Accum + Digit_val is larger than the maximum value for Type,
@@ -541,7 +535,7 @@ is_nul (const char *buf, size_t bufsize)
 static inline void
 emit_mandatory_arg_note (void)
 {
-  fputs (_("\n\
+	fputs (_("\n\
 Mandatory arguments to long options are mandatory for short options too.\n\
 "), stdout);
 }
@@ -549,7 +543,7 @@ Mandatory arguments to long options are mandatory for short options too.\n\
 static inline void
 emit_size_note (void)
 {
-  fputs (_("\n\
+	fputs (_("\n\
 SIZE is an integer and optional unit (example: 10M is 10*1024*1024).  Units\n\
 are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ... (powers of 1000).\n\
 "), stdout);
@@ -558,7 +552,7 @@ are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ... (powers of 1000).\n\
 static inline void
 emit_blocksize_note (char const *program)
 {
-  printf (_("\n\
+	printf (_("\n\
 Display values are in units of the first available SIZE from --block-size,\n\
 and the %s_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.\n\
 Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).\n\
@@ -568,32 +562,31 @@ Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).\n\
 static inline void
 emit_ancillary_info (void)
 {
-  printf (_("\nReport %s bugs to %s\n"), last_component (program_name),
-          PACKAGE_BUGREPORT);
-  printf (_("%s home page: <%s>\n"), PACKAGE_NAME, PACKAGE_URL);
-  fputs (_("General help using GNU software: <http://www.gnu.org/gethelp/>\n"),
-         stdout);
-  /* Don't output this redundant message for English locales.
-     Note we still output for 'C' so that it gets included in the man page.  */
-  const char *lc_messages = setlocale (LC_MESSAGES, NULL);
-  if (lc_messages && STRNCMP_LIT (lc_messages, "en_"))
-    {
-      /* TRANSLATORS: Replace LANG_CODE in this URL with your language code
-         <http://translationproject.org/team/LANG_CODE.html> to form one of
-         the URLs at http://translationproject.org/team/.  Otherwise, replace
-         the entire URL with your translation team's email address.  */
-      printf (_("Report %s translation bugs to "
-                "<http://translationproject.org/team/>\n"),
-                last_component (program_name));
-    }
-  printf (_("For complete documentation, run: "
-            "info coreutils '%s invocation'\n"), last_component (program_name));
+	printf (_("\nReport %s bugs to %s\n"), last_component (program_name),
+			PACKAGE_BUGREPORT);
+	printf (_("%s home page: <%s>\n"), PACKAGE_NAME, PACKAGE_URL);
+	fputs (_("General help using GNU software: <http://www.gnu.org/gethelp/>\n"),
+		   stdout);
+	/* Don't output this redundant message for English locales.
+	   Note we still output for 'C' so that it gets included in the man page.  */
+	const char *lc_messages = setlocale (LC_MESSAGES, NULL);
+	if (lc_messages && STRNCMP_LIT (lc_messages, "en_")) {
+		/* TRANSLATORS: Replace LANG_CODE in this URL with your language code
+		   <http://translationproject.org/team/LANG_CODE.html> to form one of
+		   the URLs at http://translationproject.org/team/.  Otherwise, replace
+		   the entire URL with your translation team's email address.  */
+		printf (_("Report %s translation bugs to "
+				  "<http://translationproject.org/team/>\n"),
+				last_component (program_name));
+	}
+	printf (_("For complete documentation, run: "
+			  "info coreutils '%s invocation'\n"), last_component (program_name));
 }
 
 static inline void
 emit_try_help (void)
 {
-  fprintf (stderr, _("Try '%s --help' for more information.\n"), program_name);
+	fprintf (stderr, _("Try '%s --help' for more information.\n"), program_name);
 }
 
 #include "inttostr.h"
@@ -601,23 +594,23 @@ emit_try_help (void)
 static inline char *
 timetostr (time_t t, char *buf)
 {
-  return (TYPE_SIGNED (time_t)
-          ? imaxtostr (t, buf)
-          : umaxtostr (t, buf));
+	return (TYPE_SIGNED (time_t)
+			? imaxtostr (t, buf)
+			: umaxtostr (t, buf));
 }
 
 static inline char *
 bad_cast (char const *s)
 {
-  return (char *) s;
+	return (char *) s;
 }
 
 /* Return a boolean indicating whether SB->st_size is defined.  */
 static inline bool
 usable_st_size (struct stat const *sb)
 {
-  return (S_ISREG (sb->st_mode) || S_ISLNK (sb->st_mode)
-          || S_TYPEISSHM (sb) || S_TYPEISTMO (sb));
+	return (S_ISREG (sb->st_mode) || S_ISLNK (sb->st_mode)
+			|| S_TYPEISSHM (sb) || S_TYPEISTMO (sb));
 }
 
 void usage (int status) ATTRIBUTE_NORETURN;
@@ -642,11 +635,11 @@ The following directory is part of the cycle:\n  %s\n"), \
 static inline char *
 stzncpy (char *restrict dest, char const *restrict src, size_t len)
 {
-  char const *src_end = src + len;
-  while (src < src_end && *src)
-    *dest++ = *src++;
-  *dest = 0;
-  return dest;
+	char const *src_end = src + len;
+	while (src < src_end && *src)
+		*dest++ = *src++;
+	*dest = 0;
+	return dest;
 }
 
 #ifndef ARRAY_CARDINALITY

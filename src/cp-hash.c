@@ -30,14 +30,13 @@
    the source device/inode pair so that if we encounter a matching dev/ino
    pair in the source tree we can arrange to create a hard link between
    the corresponding names in the destination tree.  */
-struct Src_to_dest
-{
-  ino_t st_ino;
-  dev_t st_dev;
-  /* Destination file name (of non-directory or pre-existing directory)
-     corresponding to the dev/ino of a copied file, or the destination file
-     name corresponding to a dev/ino pair for a newly-created directory. */
-  char *name;
+struct Src_to_dest {
+	ino_t st_ino;
+	dev_t st_dev;
+	/* Destination file name (of non-directory or pre-existing directory)
+	   corresponding to the dev/ino of a copied file, or the destination file
+	   name corresponding to a dev/ino pair for a newly-created directory. */
+	char *name;
 };
 
 /* This table maps source dev/ino to destination file name.
@@ -50,12 +49,12 @@ static Hash_table *src_to_dest;
 static size_t
 src_to_dest_hash (void const *x, size_t table_size)
 {
-  struct Src_to_dest const *p = x;
+	struct Src_to_dest const *p = x;
 
-  /* Ignoring the device number here should be fine.  */
-  /* The cast to uintmax_t prevents negative remainders
-     if st_ino is negative.  */
-  return (uintmax_t) p->st_ino % table_size;
+	/* Ignoring the device number here should be fine.  */
+	/* The cast to uintmax_t prevents negative remainders
+	   if st_ino is negative.  */
+	return (uintmax_t) p->st_ino % table_size;
 }
 
 /* Compare two Src_to_dest entries.
@@ -63,17 +62,17 @@ src_to_dest_hash (void const *x, size_t table_size)
 static bool
 src_to_dest_compare (void const *x, void const *y)
 {
-  struct Src_to_dest const *a = x;
-  struct Src_to_dest const *b = y;
-  return SAME_INODE (*a, *b) ? true : false;
+	struct Src_to_dest const *a = x;
+	struct Src_to_dest const *b = y;
+	return SAME_INODE (*a, *b) ? true : false;
 }
 
 static void
 src_to_dest_free (void *x)
 {
-  struct Src_to_dest *a = x;
-  free (a->name);
-  free (x);
+	struct Src_to_dest *a = x;
+	free (a->name);
+	free (x);
 }
 
 /* Remove the entry matching INO/DEV from the table
@@ -81,16 +80,16 @@ src_to_dest_free (void *x)
 extern void
 forget_created (ino_t ino, dev_t dev)
 {
-  struct Src_to_dest probe;
-  struct Src_to_dest *ent;
+	struct Src_to_dest probe;
+	struct Src_to_dest *ent;
 
-  probe.st_ino = ino;
-  probe.st_dev = dev;
-  probe.name = NULL;
+	probe.st_ino = ino;
+	probe.st_dev = dev;
+	probe.name = NULL;
 
-  ent = hash_delete (src_to_dest, &probe);
-  if (ent)
-    src_to_dest_free (ent);
+	ent = hash_delete (src_to_dest, &probe);
+	if (ent)
+		src_to_dest_free (ent);
 }
 
 /* If INO/DEV correspond to an already-copied source file, return the
@@ -99,12 +98,12 @@ forget_created (ino_t ino, dev_t dev)
 extern char *
 src_to_dest_lookup (ino_t ino, dev_t dev)
 {
-  struct Src_to_dest ent;
-  struct Src_to_dest const *e;
-  ent.st_ino = ino;
-  ent.st_dev = dev;
-  e = hash_lookup (src_to_dest, &ent);
-  return e ? e->name : NULL;
+	struct Src_to_dest ent;
+	struct Src_to_dest const *e;
+	ent.st_ino = ino;
+	ent.st_dev = dev;
+	e = hash_lookup (src_to_dest, &ent);
+	return e ? e->name : NULL;
 }
 
 /* Add file NAME, copied from inode number INO and device number DEV,
@@ -114,44 +113,42 @@ src_to_dest_lookup (ino_t ino, dev_t dev)
 extern char *
 remember_copied (const char *name, ino_t ino, dev_t dev)
 {
-  struct Src_to_dest *ent;
-  struct Src_to_dest *ent_from_table;
+	struct Src_to_dest *ent;
+	struct Src_to_dest *ent_from_table;
 
-  ent = xmalloc (sizeof *ent);
-  ent->name = xstrdup (name);
-  ent->st_ino = ino;
-  ent->st_dev = dev;
+	ent = xmalloc (sizeof * ent);
+	ent->name = xstrdup (name);
+	ent->st_ino = ino;
+	ent->st_dev = dev;
 
-  ent_from_table = hash_insert (src_to_dest, ent);
-  if (ent_from_table == NULL)
-    {
-      /* Insertion failed due to lack of memory.  */
-      xalloc_die ();
-    }
+	ent_from_table = hash_insert (src_to_dest, ent);
+	if (ent_from_table == NULL) {
+		/* Insertion failed due to lack of memory.  */
+		xalloc_die ();
+	}
 
-  /* Determine whether there was already an entry in the table
-     with a matching key.  If so, free ENT (it wasn't inserted) and
-     return the 'name' from the table entry.  */
-  if (ent_from_table != ent)
-    {
-      src_to_dest_free (ent);
-      return (char *) ent_from_table->name;
-    }
+	/* Determine whether there was already an entry in the table
+	   with a matching key.  If so, free ENT (it wasn't inserted) and
+	   return the 'name' from the table entry.  */
+	if (ent_from_table != ent) {
+		src_to_dest_free (ent);
+		return (char *) ent_from_table->name;
+	}
 
-  /* New key;  insertion succeeded.  */
-  return NULL;
+	/* New key;  insertion succeeded.  */
+	return NULL;
 }
 
 /* Initialize the hash table.  */
 extern void
 hash_init (void)
 {
-  src_to_dest = hash_initialize (INITIAL_TABLE_SIZE, NULL,
-                                 src_to_dest_hash,
-                                 src_to_dest_compare,
-                                 src_to_dest_free);
-  if (src_to_dest == NULL)
-    xalloc_die ();
+	src_to_dest = hash_initialize (INITIAL_TABLE_SIZE, NULL,
+								   src_to_dest_hash,
+								   src_to_dest_compare,
+								   src_to_dest_free);
+	if (src_to_dest == NULL)
+		xalloc_die ();
 }
 
 /* Reset the hash structure in the global variable 'htab' to
@@ -160,5 +157,5 @@ hash_init (void)
 extern void
 forget_all (void)
 {
-  hash_free (src_to_dest);
+	hash_free (src_to_dest);
 }

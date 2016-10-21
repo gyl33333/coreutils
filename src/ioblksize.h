@@ -64,9 +64,9 @@
    In the future we could use the above method if available
    and default to io_blksize() if not.
  */
-enum { IO_BUFSIZE = 64*1024 };
+enum { IO_BUFSIZE = 64 * 1024 };
 static inline size_t
 io_blksize (struct stat sb)
 {
-  return MAX (IO_BUFSIZE, ST_BLKSIZE (sb));
+	return MAX (IO_BUFSIZE, ST_BLKSIZE (sb));
 }

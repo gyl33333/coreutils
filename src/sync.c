@@ -33,41 +33,40 @@
 void
 usage (int status)
 {
-  if (status != EXIT_SUCCESS)
-    emit_try_help ();
-  else
-    {
-      printf (_("Usage: %s [OPTION]\n"), program_name);
-      fputs (_("\
+	if (status != EXIT_SUCCESS)
+		emit_try_help ();
+	else {
+		printf (_("Usage: %s [OPTION]\n"), program_name);
+		fputs (_("\
 Force changed blocks to disk, update the super block.\n\
 \n\
 "), stdout);
-      fputs (HELP_OPTION_DESCRIPTION, stdout);
-      fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
-    }
-  exit (status);
+		fputs (HELP_OPTION_DESCRIPTION, stdout);
+		fputs (VERSION_OPTION_DESCRIPTION, stdout);
+		emit_ancillary_info ();
+	}
+	exit (status);
 }
 
 int
 main (int argc, char **argv)
 {
-  initialize_main (&argc, &argv);
-  set_program_name (argv[0]);
-  setlocale (LC_ALL, "");
-  bindtextdomain (PACKAGE, LOCALEDIR);
-  textdomain (PACKAGE);
+	initialize_main (&argc, &argv);
+	set_program_name (argv[0]);
+	setlocale (LC_ALL, "");
+	bindtextdomain (PACKAGE, LOCALEDIR);
+	textdomain (PACKAGE);
 
-  atexit (close_stdout);
+	atexit (close_stdout);
 
-  parse_long_options (argc, argv, PROGRAM_NAME, PACKAGE, Version,
-                      usage, AUTHORS, (char const *) NULL);
-  if (getopt_long (argc, argv, "", NULL, NULL) != -1)
-    usage (EXIT_FAILURE);
+	parse_long_options (argc, argv, PROGRAM_NAME, PACKAGE, Version,
+						usage, AUTHORS, (char const *) NULL);
+	if (getopt_long (argc, argv, "", NULL, NULL) != -1)
+		usage (EXIT_FAILURE);
 
-  if (optind < argc)
-    error (0, 0, _("ignoring all arguments"));
+	if (optind < argc)
+		error (0, 0, _("ignoring all arguments"));
 
-  sync ();
-  exit (EXIT_SUCCESS);
+	sync ();
+	exit (EXIT_SUCCESS);
 }

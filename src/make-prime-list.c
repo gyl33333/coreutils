@@ -46,182 +46,169 @@ typedef uintmax_t wide_uint;
 # endif
 #endif
 
-struct prime
-{
-  unsigned p;
-  wide_uint pinv; /* Inverse mod b = 2^{bitsize of wide_uint} */
-  wide_uint lim; /* floor ((wide_uint) -1 / p) */
+struct prime {
+	unsigned p;
+	wide_uint pinv; /* Inverse mod b = 2^{bitsize of wide_uint} */
+	wide_uint lim; /* floor ((wide_uint) -1 / p) */
 };
 
 static wide_uint _GL_ATTRIBUTE_CONST
 binvert (wide_uint a)
 {
-  wide_uint x = 0xf5397db1 >> (4*((a/2) & 0x7));
-  for (;;)
-    {
-      wide_uint y = 2*x - x*x*a;
-      if (y == x)
-        return x;
-      x = y;
-    }
+	wide_uint x = 0xf5397db1 >> (4 * ((a / 2) & 0x7));
+	for (;;) {
+		wide_uint y = 2 * x - x * x * a;
+		if (y == x)
+			return x;
+		x = y;
+	}
 }
 
 static void
 process_prime (struct prime *info, unsigned p)
 {
-  wide_uint max = -1;
-  info->p = p;
-  info->pinv = binvert (p);
-  info->lim = max / p;
+	wide_uint max = -1;
+	info->p = p;
+	info->pinv = binvert (p);
+	info->lim = max / p;
 }
 
 static void
 print_wide_uint (wide_uint n, int nesting, unsigned wide_uint_bits)
 {
-  /* Number of bits per integer literal.  8 is too many, because
-     uintmax_t is 32 bits on some machines so we cannot shift by 32 bits.
-     So use 7.  */
-  int hex_digits_per_literal = 7;
-  int bits_per_literal = hex_digits_per_literal * 4;
+	/* Number of bits per integer literal.  8 is too many, because
+	   uintmax_t is 32 bits on some machines so we cannot shift by 32 bits.
+	   So use 7.  */
+	int hex_digits_per_literal = 7;
+	int bits_per_literal = hex_digits_per_literal * 4;
 
-  unsigned remainder = n & ((1 << bits_per_literal) - 1);
+	unsigned remainder = n & ((1 << bits_per_literal) - 1);
 
-  if (n != remainder)
-    {
-      int needs_parentheses = n >> bits_per_literal >> bits_per_literal != 0;
-      if (needs_parentheses)
-        printf ("(");
-      print_wide_uint (n >> bits_per_literal, nesting + 1, wide_uint_bits);
-      if (needs_parentheses)
-        printf (")\n%*s", nesting + 3, "");
-      printf (" << %d | ", bits_per_literal);
-    }
-  else if (nesting)
-    {
-      printf ("(uintmax_t) ");
-      hex_digits_per_literal
-        = ((wide_uint_bits - 1) % bits_per_literal) % 4 + 1;
-    }
+	if (n != remainder) {
+		int needs_parentheses = n >> bits_per_literal >> bits_per_literal != 0;
+		if (needs_parentheses)
+			printf ("(");
+		print_wide_uint (n >> bits_per_literal, nesting + 1, wide_uint_bits);
+		if (needs_parentheses)
+			printf (")\n%*s", nesting + 3, "");
+		printf (" << %d | ", bits_per_literal);
+	} else if (nesting) {
+		printf ("(uintmax_t) ");
+		hex_digits_per_literal
+			= ((wide_uint_bits - 1) % bits_per_literal) % 4 + 1;
+	}
 
-  printf ("0x%0*xU", hex_digits_per_literal, remainder);
+	printf ("0x%0*xU", hex_digits_per_literal, remainder);
 }
 
 static void
 output_primes (const struct prime *primes, unsigned nprimes)
 {
-  unsigned i;
-  unsigned p;
-  int is_prime;
+	unsigned i;
+	unsigned p;
+	int is_prime;
 
-  /* Compute wide_uint_bits by repeated shifting, rather than by
-     multiplying sizeof by CHAR_BIT, as this works even if the
-     wide_uint representation has holes.  */
-  unsigned wide_uint_bits = 0;
-  wide_uint mask = -1;
-  for (wide_uint_bits = 0; mask; wide_uint_bits++)
-    mask >>= 1;
+	/* Compute wide_uint_bits by repeated shifting, rather than by
+	   multiplying sizeof by CHAR_BIT, as this works even if the
+	   wide_uint representation has holes.  */
+	unsigned wide_uint_bits = 0;
+	wide_uint mask = -1;
+	for (wide_uint_bits = 0; mask; wide_uint_bits++)
+		mask >>= 1;
 
-  puts ("/* Generated file -- DO NOT EDIT */\n");
-  printf ("#define WIDE_UINT_BITS %u\n", wide_uint_bits);
+	puts ("/* Generated file -- DO NOT EDIT */\n");
+	printf ("#define WIDE_UINT_BITS %u\n", wide_uint_bits);
 
-  for (i = 0, p = 2; i < nprimes; i++)
-    {
-      unsigned int d8 = i + 8 < nprimes ? primes[i + 8].p - primes[i].p : 0xff;
-      if (255 < d8) /* this happens at 668221 */
-        abort ();
-      printf ("P (%u, %u,\n   (", primes[i].p - p, d8);
-      print_wide_uint (primes[i].pinv, 0, wide_uint_bits);
-      printf ("),\n   UINTMAX_MAX / %d)\n", primes[i].p);
-      p = primes[i].p;
-    }
+	for (i = 0, p = 2; i < nprimes; i++) {
+		unsigned int d8 = i + 8 < nprimes ? primes[i + 8].p - primes[i].p : 0xff;
+		if (255 < d8) /* this happens at 668221 */
+			abort ();
+		printf ("P (%u, %u,\n   (", primes[i].p - p, d8);
+		print_wide_uint (primes[i].pinv, 0, wide_uint_bits);
+		printf ("),\n   UINTMAX_MAX / %d)\n", primes[i].p);
+		p = primes[i].p;
+	}
 
-  printf ("\n#undef FIRST_OMITTED_PRIME\n");
+	printf ("\n#undef FIRST_OMITTED_PRIME\n");
 
-  /* Find next prime */
-  do
-    {
-      p += 2;
-      for (i = 0, is_prime = 1; is_prime; i++)
-        {
-          if (primes[i].p * primes[i].p > p)
-            break;
-          if (p * primes[i].pinv <= primes[i].lim)
-            {
-              is_prime = 0;
-              break;
-            }
-        }
-    }
-  while (!is_prime);
+	/* Find next prime */
+	do {
+		p += 2;
+		for (i = 0, is_prime = 1; is_prime; i++) {
+			if (primes[i].p * primes[i].p > p)
+				break;
+			if (p * primes[i].pinv <= primes[i].lim) {
+				is_prime = 0;
+				break;
+			}
+		}
+	} while (!is_prime);
 
-  printf ("#define FIRST_OMITTED_PRIME %u\n", p);
+	printf ("#define FIRST_OMITTED_PRIME %u\n", p);
 }
 
 static void *
 xalloc (size_t s)
 {
-  void *p = malloc (s);
-  if (p)
-    return p;
+	void *p = malloc (s);
+	if (p)
+		return p;
 
-  fprintf (stderr, "Virtual memory exhausted.\n");
-  exit (EXIT_FAILURE);
+	fprintf (stderr, "Virtual memory exhausted.\n");
+	exit (EXIT_FAILURE);
 }
 
 int
 main (int argc, char **argv)
 {
-  int limit;
+	int limit;
 
-  char *sieve;
-  size_t size, i;
+	char *sieve;
+	size_t size, i;
 
-  struct prime *prime_list;
-  unsigned nprimes;
+	struct prime *prime_list;
+	unsigned nprimes;
 
-  if (argc != 2)
-    {
-      fprintf (stderr, "Usage: %s LIMIT\n"
-               "Produces a list of odd primes <= LIMIT\n", argv[0]);
-      return EXIT_FAILURE;
-    }
-  limit = atoi (argv[1]);
-  if (limit < 3)
-    exit (EXIT_SUCCESS);
+	if (argc != 2) {
+		fprintf (stderr, "Usage: %s LIMIT\n"
+				 "Produces a list of odd primes <= LIMIT\n", argv[0]);
+		return EXIT_FAILURE;
+	}
+	limit = atoi (argv[1]);
+	if (limit < 3)
+		exit (EXIT_SUCCESS);
 
-  /* Make limit odd */
-  if ( !(limit & 1))
-    limit--;
+	/* Make limit odd */
+	if ( !(limit & 1))
+		limit--;
 
-  size = (limit-1)/2;
-  /* sieve[i] represents 3+2*i */
-  sieve = xalloc (size);
-  memset (sieve, 1, size);
+	size = (limit - 1) / 2;
+	/* sieve[i] represents 3+2*i */
+	sieve = xalloc (size);
+	memset (sieve, 1, size);
 
-  prime_list = xalloc (size * sizeof (*prime_list));
-  nprimes = 0;
+	prime_list = xalloc (size * sizeof (*prime_list));
+	nprimes = 0;
 
-  for (i = 0; i < size;)
-    {
-      unsigned p = 3+2*i;
-      unsigned j;
+	for (i = 0; i < size;) {
+		unsigned p = 3 + 2 * i;
+		unsigned j;
 
-      process_prime (&prime_list[nprimes++], p);
+		process_prime (&prime_list[nprimes++], p);
 
-      for (j = (p*p - 3)/2; j < size; j+= p)
-        sieve[j] = 0;
+		for (j = (p * p - 3) / 2; j < size; j += p)
+			sieve[j] = 0;
 
-      while (i < size && sieve[++i] == 0)
-        ;
-    }
+		while (i < size && sieve[++i] == 0)
+			;
+	}
 
-  output_primes (prime_list, nprimes);
+	output_primes (prime_list, nprimes);
 
-  if (ferror (stdout) + fclose (stdout))
-    {
-      fprintf (stderr, "write error: %s\n", strerror (errno));
-      return EXIT_FAILURE;
-    }
+	if (ferror (stdout) + fclose (stdout)) {
+		fprintf (stderr, "write error: %s\n", strerror (errno));
+		return EXIT_FAILURE;
+	}
 
-  return EXIT_SUCCESS;
+	return EXIT_SUCCESS;
 }

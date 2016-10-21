@@ -34,55 +34,52 @@
 void
 usage (int status)
 {
-  if (status != EXIT_SUCCESS)
-    emit_try_help ();
-  else
-    {
-      printf (_("\
+	if (status != EXIT_SUCCESS)
+		emit_try_help ();
+	else {
+		printf (_("\
 Usage: %s [STRING]...\n\
   or:  %s OPTION\n\
 "),
-              program_name, program_name);
+				program_name, program_name);
 
-      fputs (_("\
+		fputs (_("\
 Repeatedly output a line with all specified STRING(s), or 'y'.\n\
 \n\
 "), stdout);
-      fputs (HELP_OPTION_DESCRIPTION, stdout);
-      fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
-    }
-  exit (status);
+		fputs (HELP_OPTION_DESCRIPTION, stdout);
+		fputs (VERSION_OPTION_DESCRIPTION, stdout);
+		emit_ancillary_info ();
+	}
+	exit (status);
 }
 
 int
 main (int argc, char **argv)
 {
-  initialize_main (&argc, &argv);
-  set_program_name (argv[0]);
-  setlocale (LC_ALL, "");
-  bindtextdomain (PACKAGE, LOCALEDIR);
-  textdomain (PACKAGE);
+	initialize_main (&argc, &argv);
+	set_program_name (argv[0]);
+	setlocale (LC_ALL, "");
+	bindtextdomain (PACKAGE, LOCALEDIR);
+	textdomain (PACKAGE);
 
-  atexit (close_stdout);
+	atexit (close_stdout);
 
-  parse_long_options (argc, argv, PROGRAM_NAME, PACKAGE_NAME, Version,
-                      usage, AUTHORS, (char const *) NULL);
-  if (getopt_long (argc, argv, "+", NULL, NULL) != -1)
-    usage (EXIT_FAILURE);
+	parse_long_options (argc, argv, PROGRAM_NAME, PACKAGE_NAME, Version,
+						usage, AUTHORS, (char const *) NULL);
+	if (getopt_long (argc, argv, "+", NULL, NULL) != -1)
+		usage (EXIT_FAILURE);
 
-  if (argc <= optind)
-    {
-      optind = argc;
-      argv[argc++] = bad_cast ("y");
-    }
+	if (argc <= optind) {
+		optind = argc;
+		argv[argc++] = bad_cast ("y");
+	}
 
-  while (true)
-    {
-      int i;
-      for (i = optind; i < argc; i++)
-        if (fputs (argv[i], stdout) == EOF
-            || putchar (i == argc - 1 ? '\n' : ' ') == EOF)
-          error (EXIT_FAILURE, errno, _("standard output"));
-    }
+	while (true) {
+		int i;
+		for (i = optind; i < argc; i++)
+			if (fputs (argv[i], stdout) == EOF
+				|| putchar (i == argc - 1 ? '\n' : ' ') == EOF)
+				error (EXIT_FAILURE, errno, _("standard output"));
+	}
 }

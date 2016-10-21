@@ -11,52 +11,50 @@
 
 # include <stdint.h>
 
-struct fiemap_extent
-{
-  /* Logical offset in bytes for the start of the extent
-     from the beginning of the file.  */
-  uint64_t fe_logical;
+struct fiemap_extent {
+	/* Logical offset in bytes for the start of the extent
+	   from the beginning of the file.  */
+	uint64_t fe_logical;
 
-  /* Physical offset in bytes for the start of the extent
-     from the beginning of the disk.  */
-  uint64_t fe_physical;
+	/* Physical offset in bytes for the start of the extent
+	   from the beginning of the disk.  */
+	uint64_t fe_physical;
 
-  /* Length in bytes for this extent.  */
-  uint64_t fe_length;
+	/* Length in bytes for this extent.  */
+	uint64_t fe_length;
 
-  uint64_t fe_reserved64[2];
+	uint64_t fe_reserved64[2];
 
-  /* FIEMAP_EXTENT_* flags for this extent.  */
-  uint32_t fe_flags;
+	/* FIEMAP_EXTENT_* flags for this extent.  */
+	uint32_t fe_flags;
 
-  uint32_t fe_reserved[3];
+	uint32_t fe_reserved[3];
 };
 
-struct fiemap
-{
-  /* Logical offset(inclusive) at which to start mapping(in).  */
-  uint64_t fm_start;
+struct fiemap {
+	/* Logical offset(inclusive) at which to start mapping(in).  */
+	uint64_t fm_start;
 
-  /* Logical length of mapping which userspace wants(in).  */
-  uint64_t fm_length;
+	/* Logical length of mapping which userspace wants(in).  */
+	uint64_t fm_length;
 
-  /* FIEMAP_FLAG_* flags for request(in/out).  */
-  uint32_t fm_flags;
+	/* FIEMAP_FLAG_* flags for request(in/out).  */
+	uint32_t fm_flags;
 
-  /* Number of extents that were mapped(out).  */
-  uint32_t fm_mapped_extents;
+	/* Number of extents that were mapped(out).  */
+	uint32_t fm_mapped_extents;
 
-  /* Size of fm_extents array(in).  */
-  uint32_t fm_extent_count;
+	/* Size of fm_extents array(in).  */
+	uint32_t fm_extent_count;
 
-  uint32_t fm_reserved;
+	uint32_t fm_reserved;
 
-  /* Array of mapped extents(out).
-     This is protected by the ifdef because it uses non standard
-     zero length arrays.  Note C99 has the equivalent flexible arrays,
-     but we don't use those for maximum portability to older systems.  */
+	/* Array of mapped extents(out).
+	   This is protected by the ifdef because it uses non standard
+	   zero length arrays.  Note C99 has the equivalent flexible arrays,
+	   but we don't use those for maximum portability to older systems.  */
 # ifdef __linux__
-  struct fiemap_extent fm_extents[0];
+	struct fiemap_extent fm_extents[0];
 # endif
 };
 

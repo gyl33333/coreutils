@@ -36,105 +36,97 @@
   proper_name ("James Youngman")
 
 
-static struct option const longopts[] =
-{
-  {GETOPT_HELP_OPTION_DECL},
-  {GETOPT_VERSION_OPTION_DECL},
-  {NULL, 0, NULL, 0}
+static struct option const longopts[] = {
+	{GETOPT_HELP_OPTION_DECL},
+	{GETOPT_VERSION_OPTION_DECL},
+	{NULL, 0, NULL, 0}
 };
 
 void
 usage (int status)
 {
-  if (status != EXIT_SUCCESS)
-    emit_try_help ();
-  else
-    {
-      printf (_("Usage: %s [OPTION]... [USERNAME]...\n"), program_name);
-      fputs (_("\
+	if (status != EXIT_SUCCESS)
+		emit_try_help ();
+	else {
+		printf (_("Usage: %s [OPTION]... [USERNAME]...\n"), program_name);
+		fputs (_("\
 Print group memberships for each USERNAME or, if no USERNAME is specified, for\
 \n\
 the current process (which may differ if the groups database has changed).\n"),
-             stdout);
-      fputs (HELP_OPTION_DESCRIPTION, stdout);
-      fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
-    }
-  exit (status);
+			   stdout);
+		fputs (HELP_OPTION_DESCRIPTION, stdout);
+		fputs (VERSION_OPTION_DESCRIPTION, stdout);
+		emit_ancillary_info ();
+	}
+	exit (status);
 }
 
 int
 main (int argc, char **argv)
 {
-  int optc;
-  bool ok = true;
-  gid_t rgid, egid;
-  uid_t ruid;
+	int optc;
+	bool ok = true;
+	gid_t rgid, egid;
+	uid_t ruid;
 
-  initialize_main (&argc, &argv);
-  set_program_name (argv[0]);
-  setlocale (LC_ALL, "");
-  bindtextdomain (PACKAGE, LOCALEDIR);
-  textdomain (PACKAGE);
+	initialize_main (&argc, &argv);
+	set_program_name (argv[0]);
+	setlocale (LC_ALL, "");
+	bindtextdomain (PACKAGE, LOCALEDIR);
+	textdomain (PACKAGE);
 
-  atexit (close_stdout);
+	atexit (close_stdout);
 
-  /* Processing the arguments this way makes groups.c behave differently to
-   * groups.sh if one of the arguments is "--".
-   */
-  while ((optc = getopt_long (argc, argv, "", longopts, NULL)) != -1)
-    {
-      switch (optc)
-        {
-        case_GETOPT_HELP_CHAR;
-        case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
-        default:
-          usage (EXIT_FAILURE);
-        }
-    }
+	/* Processing the arguments this way makes groups.c behave differently to
+	 * groups.sh if one of the arguments is "--".
+	 */
+	while ((optc = getopt_long (argc, argv, "", longopts, NULL)) != -1) {
+		switch (optc) {
+			case_GETOPT_HELP_CHAR;
+			case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
+		default:
+			usage (EXIT_FAILURE);
+		}
+	}
 
-  if (optind == argc)
-    {
-      /* No arguments.  Divulge the details of the current process. */
-      uid_t NO_UID = -1;
-      gid_t NO_GID = -1;
+	if (optind == argc) {
+		/* No arguments.  Divulge the details of the current process. */
+		uid_t NO_UID = -1;
+		gid_t NO_GID = -1;
 
-      errno = 0;
-      ruid = getuid ();
-      if (ruid == NO_UID && errno)
-        error (EXIT_FAILURE, errno, _("cannot get real UID"));
+		errno = 0;
+		ruid = getuid ();
+		if (ruid == NO_UID && errno)
+			error (EXIT_FAILURE, errno, _("cannot get real UID"));
 
-      errno = 0;
-      egid = getegid ();
-      if (egid == NO_GID && errno)
-        error (EXIT_FAILURE, errno, _("cannot get effective GID"));
+		errno = 0;
+		egid = getegid ();
+		if (egid == NO_GID && errno)
+			error (EXIT_FAILURE, errno, _("cannot get effective GID"));
 
-      errno = 0;
-      rgid = getgid ();
-      if (rgid == NO_GID && errno)
-        error (EXIT_FAILURE, errno, _("cannot get real GID"));
+		errno = 0;
+		rgid = getgid ();
+		if (rgid == NO_GID && errno)
+			error (EXIT_FAILURE, errno, _("cannot get real GID"));
 
-      if (!print_group_list (NULL, ruid, rgid, egid, true))
-        ok = false;
-      putchar ('\n');
-    }
-  else
-    {
-      /* At least one argument.  Divulge the details of the specified users. */
-      while (optind < argc)
-        {
-          struct passwd *pwd = getpwnam (argv[optind]);
-          if (pwd == NULL)
-            error (EXIT_FAILURE, 0, _("%s: no such user"), argv[optind]);
-          ruid = pwd->pw_uid;
-          rgid = egid = pwd->pw_gid;
+		if (!print_group_list (NULL, ruid, rgid, egid, true))
+			ok = false;
+		putchar ('\n');
+	} else {
+		/* At least one argument.  Divulge the details of the specified users. */
+		while (optind < argc) {
+			struct passwd *pwd = getpwnam (argv[optind]);
+			if (pwd == NULL)
+				error (EXIT_FAILURE, 0, _("%s: no such user"), argv[optind]);
+			ruid = pwd->pw_uid;
+			rgid = egid = pwd->pw_gid;
 
-          printf ("%s : ", argv[optind]);
-          if (!print_group_list (argv[optind++], ruid, rgid, egid, true))
-            ok = false;
-          putchar ('\n');
-        }
-    }
+			printf ("%s : ", argv[optind]);
+			if (!print_group_list (argv[optind++], ruid, rgid, egid, true))
+				ok = false;
+			putchar ('\n');
+		}
+	}
 
-  exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
+	exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
 }

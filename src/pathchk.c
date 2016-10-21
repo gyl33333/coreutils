@@ -66,94 +66,88 @@ static bool validate_file_name (char *, bool, bool);
 
 /* For long options that have no equivalent short option, use a
    non-character as a pseudo short option, starting with CHAR_MAX + 1.  */
-enum
-{
-  PORTABILITY_OPTION = CHAR_MAX + 1
+enum {
+	PORTABILITY_OPTION = CHAR_MAX + 1
 };
 
-static struct option const longopts[] =
-{
-  {"portability", no_argument, NULL, PORTABILITY_OPTION},
-  {GETOPT_HELP_OPTION_DECL},
-  {GETOPT_VERSION_OPTION_DECL},
-  {NULL, 0, NULL, 0}
+static struct option const longopts[] = {
+	{"portability", no_argument, NULL, PORTABILITY_OPTION},
+	{GETOPT_HELP_OPTION_DECL},
+	{GETOPT_VERSION_OPTION_DECL},
+	{NULL, 0, NULL, 0}
 };
 
 void
 usage (int status)
 {
-  if (status != EXIT_SUCCESS)
-    emit_try_help ();
-  else
-    {
-      printf (_("Usage: %s [OPTION]... NAME...\n"), program_name);
-      fputs (_("\
+	if (status != EXIT_SUCCESS)
+		emit_try_help ();
+	else {
+		printf (_("Usage: %s [OPTION]... NAME...\n"), program_name);
+		fputs (_("\
 Diagnose invalid or unportable file names.\n\
 \n\
   -p                  check for most POSIX systems\n\
   -P                  check for empty names and leading \"-\"\n\
       --portability   check for all POSIX systems (equivalent to -p -P)\n\
 "), stdout);
-      fputs (HELP_OPTION_DESCRIPTION, stdout);
-      fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
-    }
-  exit (status);
+		fputs (HELP_OPTION_DESCRIPTION, stdout);
+		fputs (VERSION_OPTION_DESCRIPTION, stdout);
+		emit_ancillary_info ();
+	}
+	exit (status);
 }
 
 int
 main (int argc, char **argv)
 {
-  bool ok = true;
-  bool check_basic_portability = false;
-  bool check_extra_portability = false;
-  int optc;
+	bool ok = true;
+	bool check_basic_portability = false;
+	bool check_extra_portability = false;
+	int optc;
 
-  initialize_main (&argc, &argv);
-  set_program_name (argv[0]);
-  setlocale (LC_ALL, "");
-  bindtextdomain (PACKAGE, LOCALEDIR);
-  textdomain (PACKAGE);
+	initialize_main (&argc, &argv);
+	set_program_name (argv[0]);
+	setlocale (LC_ALL, "");
+	bindtextdomain (PACKAGE, LOCALEDIR);
+	textdomain (PACKAGE);
 
-  atexit (close_stdout);
+	atexit (close_stdout);
 
-  while ((optc = getopt_long (argc, argv, "+pP", longopts, NULL)) != -1)
-    {
-      switch (optc)
-        {
-        case PORTABILITY_OPTION:
-          check_basic_portability = true;
-          check_extra_portability = true;
-          break;
+	while ((optc = getopt_long (argc, argv, "+pP", longopts, NULL)) != -1) {
+		switch (optc) {
+		case PORTABILITY_OPTION:
+			check_basic_portability = true;
+			check_extra_portability = true;
+			break;
 
-        case 'p':
-          check_basic_portability = true;
-          break;
+		case 'p':
+			check_basic_portability = true;
+			break;
 
-        case 'P':
-          check_extra_portability = true;
-          break;
+		case 'P':
+			check_extra_portability = true;
+			break;
 
-        case_GETOPT_HELP_CHAR;
+			case_GETOPT_HELP_CHAR;
 
-        case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
+			case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
 
-        default:
-          usage (EXIT_FAILURE);
-        }
-    }
+		default:
+			usage (EXIT_FAILURE);
+		}
+	}
 
-  if (optind == argc)
-    {
-      error (0, 0, _("missing operand"));
-      usage (EXIT_FAILURE);
-    }
+	if (optind == argc) {
+		error (0, 0, _("missing operand"));
+		usage (EXIT_FAILURE);
+	}
 
-  for (; optind < argc; ++optind)
-    ok &= validate_file_name (argv[optind],
-                              check_basic_portability, check_extra_portability);
+	for (; optind < argc; ++optind)
+		ok &= validate_file_name (argv[optind],
+								  check_basic_portability, check_extra_portability);
 
-  exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
+	exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
 /* If FILE contains a component with a leading "-", report an error
@@ -162,17 +156,16 @@ main (int argc, char **argv)
 static bool
 no_leading_hyphen (char const *file)
 {
-  char const *p;
+	char const *p;
 
-  for (p = file;  (p = strchr (p, '-'));  p++)
-    if (p == file || p[-1] == '/')
-      {
-        error (0, 0, _("leading '-' in a component of file name %s"),
-               quote (file));
-        return false;
-      }
+	for (p = file;  (p = strchr (p, '-'));  p++)
+		if (p == file || p[-1] == '/') {
+			error (0, 0, _("leading '-' in a component of file name %s"),
+				   quote (file));
+			return false;
+		}
 
-  return true;
+	return true;
 }
 
 /* If FILE (of length FILELEN) contains only portable characters,
@@ -181,26 +174,25 @@ no_leading_hyphen (char const *file)
 static bool
 portable_chars_only (char const *file, size_t filelen)
 {
-  size_t validlen = strspn (file,
-                            ("/"
-                             "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                             "abcdefghijklmnopqrstuvwxyz"
-                             "0123456789._-"));
-  char const *invalid = file + validlen;
+	size_t validlen = strspn (file,
+							  ("/"
+							   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+							   "abcdefghijklmnopqrstuvwxyz"
+							   "0123456789._-"));
+	char const *invalid = file + validlen;
 
-  if (*invalid)
-    {
-      mbstate_t mbstate = { 0, };
-      size_t charlen = mbrlen (invalid, filelen - validlen, &mbstate);
-      error (0, 0,
-             _("nonportable character %s in file name %s"),
-             quotearg_n_style_mem (1, locale_quoting_style, invalid,
-                                   (charlen <= MB_LEN_MAX ? charlen : 1)),
-             quote_n (0, file));
-      return false;
-    }
+	if (*invalid) {
+		mbstate_t mbstate = { 0, };
+		size_t charlen = mbrlen (invalid, filelen - validlen, &mbstate);
+		error (0, 0,
+			   _("nonportable character %s in file name %s"),
+			   quotearg_n_style_mem (1, locale_quoting_style, invalid,
+									 (charlen <= MB_LEN_MAX ? charlen : 1)),
+			   quote_n (0, file));
+		return false;
+	}
 
-  return true;
+	return true;
 }
 
 /* Return the address of the start of the next file name component in F.  */
@@ -208,9 +200,9 @@ portable_chars_only (char const *file, size_t filelen)
 static char * _GL_ATTRIBUTE_PURE
 component_start (char *f)
 {
-  while (*f == '/')
-    f++;
-  return f;
+	while (*f == '/')
+		f++;
+	return f;
 }
 
 /* Return the size of the file name component F.  F must be nonempty.  */
@@ -218,10 +210,10 @@ component_start (char *f)
 static size_t _GL_ATTRIBUTE_PURE
 component_len (char const *f)
 {
-  size_t len;
-  for (len = 1; f[len] != '/' && f[len]; len++)
-    continue;
-  return len;
+	size_t len;
+	for (len = 1; f[len] != '/' && f[len]; len++)
+		continue;
+	return len;
 }
 
 /* Make sure that
@@ -246,178 +238,161 @@ component_len (char const *f)
 
 static bool
 validate_file_name (char *file, bool check_basic_portability,
-                    bool check_extra_portability)
+					bool check_extra_portability)
 {
-  size_t filelen = strlen (file);
+	size_t filelen = strlen (file);
 
-  /* Start of file name component being checked.  */
-  char *start;
+	/* Start of file name component being checked.  */
+	char *start;
 
-  /* True if component lengths need to be checked.  */
-  bool check_component_lengths;
+	/* True if component lengths need to be checked.  */
+	bool check_component_lengths;
 
-  /* True if the file is known to exist.  */
-  bool file_exists = false;
+	/* True if the file is known to exist.  */
+	bool file_exists = false;
 
-  if (check_extra_portability && ! no_leading_hyphen (file))
-    return false;
+	if (check_extra_portability && ! no_leading_hyphen (file))
+		return false;
 
-  if ((check_basic_portability || check_extra_portability)
-      && filelen == 0)
-    {
-      /* Fail, since empty names are not portable.  As of
-         2005-01-06 POSIX does not address whether "pathchk -p ''"
-         should (or is allowed to) fail, so this is not a
-         conformance violation.  */
-      error (0, 0, _("empty file name"));
-      return false;
-    }
+	if ((check_basic_portability || check_extra_portability)
+		&& filelen == 0) {
+		/* Fail, since empty names are not portable.  As of
+		   2005-01-06 POSIX does not address whether "pathchk -p ''"
+		   should (or is allowed to) fail, so this is not a
+		   conformance violation.  */
+		error (0, 0, _("empty file name"));
+		return false;
+	}
 
-  if (check_basic_portability)
-    {
-      if (! portable_chars_only (file, filelen))
-        return false;
-    }
-  else
-    {
-      /* Check whether a file name component is in a directory that
-         is not searchable, or has some other serious problem.
-         POSIX does not allow "" as a file name, but some non-POSIX
-         hosts do (as an alias for "."), so allow "" if lstat does.  */
+	if (check_basic_portability) {
+		if (! portable_chars_only (file, filelen))
+			return false;
+	} else {
+		/* Check whether a file name component is in a directory that
+		   is not searchable, or has some other serious problem.
+		   POSIX does not allow "" as a file name, but some non-POSIX
+		   hosts do (as an alias for "."), so allow "" if lstat does.  */
 
-      struct stat st;
-      if (lstat (file, &st) == 0)
-        file_exists = true;
-      else if (errno != ENOENT || filelen == 0)
-        {
-          error (0, errno, "%s", file);
-          return false;
-        }
-    }
+		struct stat st;
+		if (lstat (file, &st) == 0)
+			file_exists = true;
+		else if (errno != ENOENT || filelen == 0) {
+			error (0, errno, "%s", file);
+			return false;
+		}
+	}
 
-  if (check_basic_portability
-      || (! file_exists && PATH_MAX_MINIMUM <= filelen))
-    {
-      size_t maxsize;
+	if (check_basic_portability
+		|| (! file_exists && PATH_MAX_MINIMUM <= filelen)) {
+		size_t maxsize;
 
-      if (check_basic_portability)
-        maxsize = _POSIX_PATH_MAX;
-      else
-        {
-          long int size;
-          char const *dir = (*file == '/' ? "/" : ".");
-          errno = 0;
-          size = pathconf (dir, _PC_PATH_MAX);
-          if (size < 0 && errno != 0)
-            {
-              error (0, errno,
-                     _("%s: unable to determine maximum file name length"),
-                     dir);
-              return false;
-            }
-          maxsize = MIN (size, SSIZE_MAX);
-        }
+		if (check_basic_portability)
+			maxsize = _POSIX_PATH_MAX;
+		else {
+			long int size;
+			char const *dir = (*file == '/' ? "/" : ".");
+			errno = 0;
+			size = pathconf (dir, _PC_PATH_MAX);
+			if (size < 0 && errno != 0) {
+				error (0, errno,
+					   _("%s: unable to determine maximum file name length"),
+					   dir);
+				return false;
+			}
+			maxsize = MIN (size, SSIZE_MAX);
+		}
 
-      if (maxsize <= filelen)
-        {
-          unsigned long int len = filelen;
-          unsigned long int maxlen = maxsize - 1;
-          error (0, 0, _("limit %lu exceeded by length %lu of file name %s"),
-                 maxlen, len, quote (file));
-          return false;
-        }
-    }
+		if (maxsize <= filelen) {
+			unsigned long int len = filelen;
+			unsigned long int maxlen = maxsize - 1;
+			error (0, 0, _("limit %lu exceeded by length %lu of file name %s"),
+				   maxlen, len, quote (file));
+			return false;
+		}
+	}
 
-  /* Check whether pathconf (..., _PC_NAME_MAX) can be avoided, i.e.,
-     whether all file name components are so short that they are valid
-     in any file system on this platform.  If CHECK_BASIC_PORTABILITY, though,
-     it's more convenient to check component lengths below.  */
+	/* Check whether pathconf (..., _PC_NAME_MAX) can be avoided, i.e.,
+	   whether all file name components are so short that they are valid
+	   in any file system on this platform.  If CHECK_BASIC_PORTABILITY, though,
+	   it's more convenient to check component lengths below.  */
 
-  check_component_lengths = check_basic_portability;
-  if (! check_component_lengths && ! file_exists)
-    {
-      for (start = file; *(start = component_start (start)); )
-        {
-          size_t length = component_len (start);
+	check_component_lengths = check_basic_portability;
+	if (! check_component_lengths && ! file_exists) {
+		for (start = file; * (start = component_start (start)); ) {
+			size_t length = component_len (start);
 
-          if (NAME_MAX_MINIMUM < length)
-            {
-              check_component_lengths = true;
-              break;
-            }
+			if (NAME_MAX_MINIMUM < length) {
+				check_component_lengths = true;
+				break;
+			}
 
-          start += length;
-        }
-    }
+			start += length;
+		}
+	}
 
-  if (check_component_lengths)
-    {
-      /* The limit on file name components for the current component.
-         This defaults to NAME_MAX_MINIMUM, for the sake of non-POSIX
-         systems (NFS, say?) where pathconf fails on "." or "/" with
-         errno == ENOENT.  */
-      size_t name_max = NAME_MAX_MINIMUM;
+	if (check_component_lengths) {
+		/* The limit on file name components for the current component.
+		   This defaults to NAME_MAX_MINIMUM, for the sake of non-POSIX
+		   systems (NFS, say?) where pathconf fails on "." or "/" with
+		   errno == ENOENT.  */
+		size_t name_max = NAME_MAX_MINIMUM;
 
-      /* If nonzero, the known limit on file name components.  */
-      size_t known_name_max = (check_basic_portability ? _POSIX_NAME_MAX : 0);
+		/* If nonzero, the known limit on file name components.  */
+		size_t known_name_max = (check_basic_portability ? _POSIX_NAME_MAX : 0);
 
-      for (start = file; *(start = component_start (start)); )
-        {
-          size_t length;
+		for (start = file; * (start = component_start (start)); ) {
+			size_t length;
 
-          if (known_name_max)
-            name_max = known_name_max;
-          else
-            {
-              long int len;
-              char const *dir = (start == file ? "." : file);
-              char c = *start;
-              errno = 0;
-              *start = '\0';
-              len = pathconf (dir, _PC_NAME_MAX);
-              *start = c;
-              if (0 <= len)
-                name_max = MIN (len, SSIZE_MAX);
-              else
-                switch (errno)
-                  {
-                  case 0:
-                    /* There is no limit.  */
-                    name_max = SIZE_MAX;
-                    break;
+			if (known_name_max)
+				name_max = known_name_max;
+			else {
+				long int len;
+				char const *dir = (start == file ? "." : file);
+				char c = *start;
+				errno = 0;
+				*start = '\0';
+				len = pathconf (dir, _PC_NAME_MAX);
+				*start = c;
+				if (0 <= len)
+					name_max = MIN (len, SSIZE_MAX);
+				else
+					switch (errno) {
+					case 0:
+						/* There is no limit.  */
+						name_max = SIZE_MAX;
+						break;
 
-                  case ENOENT:
-                    /* DIR does not exist; use its parent's maximum.  */
-                    known_name_max = name_max;
-                    break;
+					case ENOENT:
+						/* DIR does not exist; use its parent's maximum.  */
+						known_name_max = name_max;
+						break;
 
-                  default:
-                    *start = '\0';
-                    error (0, errno, "%s", dir);
-                    *start = c;
-                    return false;
-                  }
-            }
+					default:
+						*start = '\0';
+						error (0, errno, "%s", dir);
+						*start = c;
+						return false;
+					}
+			}
 
-          length = component_len (start);
+			length = component_len (start);
 
-          if (name_max < length)
-            {
-              unsigned long int len = length;
-              unsigned long int maxlen = name_max;
-              char c = start[len];
-              start[len] = '\0';
-              error (0, 0,
-                     _("limit %lu exceeded by length %lu "
-                       "of file name component %s"),
-                     maxlen, len, quote (start));
-              start[len] = c;
-              return false;
-            }
+			if (name_max < length) {
+				unsigned long int len = length;
+				unsigned long int maxlen = name_max;
+				char c = start[len];
+				start[len] = '\0';
+				error (0, 0,
+					   _("limit %lu exceeded by length %lu "
+						 "of file name component %s"),
+					   maxlen, len, quote (start));
+				start[len] = c;
+				return false;
+			}
 
-          start += length;
-        }
-    }
+			start += length;
+		}
+	}
 
-  return true;
+	return true;
 }

@@ -39,8 +39,8 @@
 static int
 sethostname (char *name, size_t namelen)
 {
-  /* Using sysinfo() is the SVR4 mechanism to set a hostname. */
-  return (sysinfo (SI_SET_HOSTNAME, name, namelen) < 0 ? -1 : 0);
+	/* Using sysinfo() is the SVR4 mechanism to set a hostname. */
+	return (sysinfo (SI_SET_HOSTNAME, name, namelen) < 0 ? -1 : 0);
 }
 
 # define HAVE_SETHOSTNAME 1  /* Now we have it... */
@@ -49,68 +49,64 @@ sethostname (char *name, size_t namelen)
 void
 usage (int status)
 {
-  if (status != EXIT_SUCCESS)
-    emit_try_help ();
-  else
-    {
-      printf (_("\
+	if (status != EXIT_SUCCESS)
+		emit_try_help ();
+	else {
+		printf (_("\
 Usage: %s [NAME]\n\
   or:  %s OPTION\n\
 Print or set the hostname of the current system.\n\
 \n\
 "),
-             program_name, program_name);
-      fputs (HELP_OPTION_DESCRIPTION, stdout);
-      fputs (VERSION_OPTION_DESCRIPTION, stdout);
-      emit_ancillary_info ();
-    }
-  exit (status);
+				program_name, program_name);
+		fputs (HELP_OPTION_DESCRIPTION, stdout);
+		fputs (VERSION_OPTION_DESCRIPTION, stdout);
+		emit_ancillary_info ();
+	}
+	exit (status);
 }
 
 int
 main (int argc, char **argv)
 {
-  char *hostname;
+	char *hostname;
 
-  initialize_main (&argc, &argv);
-  set_program_name (argv[0]);
-  setlocale (LC_ALL, "");
-  bindtextdomain (PACKAGE, LOCALEDIR);
-  textdomain (PACKAGE);
+	initialize_main (&argc, &argv);
+	set_program_name (argv[0]);
+	setlocale (LC_ALL, "");
+	bindtextdomain (PACKAGE, LOCALEDIR);
+	textdomain (PACKAGE);
 
-  atexit (close_stdout);
+	atexit (close_stdout);
 
-  parse_long_options (argc, argv, PROGRAM_NAME, PACKAGE_NAME, Version,
-                      usage, AUTHORS, (char const *) NULL);
-  if (getopt_long (argc, argv, "", NULL, NULL) != -1)
-    usage (EXIT_FAILURE);
+	parse_long_options (argc, argv, PROGRAM_NAME, PACKAGE_NAME, Version,
+						usage, AUTHORS, (char const *) NULL);
+	if (getopt_long (argc, argv, "", NULL, NULL) != -1)
+		usage (EXIT_FAILURE);
 
-  if (argc == optind + 1)
-    {
+	if (argc == optind + 1) {
 #ifdef HAVE_SETHOSTNAME
-      /* Set hostname to operand.  */
-      char const *name = argv[optind];
-      if (sethostname (name, strlen (name)) != 0)
-        error (EXIT_FAILURE, errno, _("cannot set name to %s"), quote (name));
+		/* Set hostname to operand.  */
+		char const *name = argv[optind];
+		if (sethostname (name, strlen (name)) != 0)
+			error (EXIT_FAILURE, errno, _("cannot set name to %s"), quote (name));
 #else
-      error (EXIT_FAILURE, 0,
-             _("cannot set hostname; this system lacks the functionality"));
+		error (EXIT_FAILURE, 0,
+			   _("cannot set hostname; this system lacks the functionality"));
 #endif
-    }
+	}
 
-  if (argc <= optind)
-    {
-      hostname = xgethostname ();
-      if (hostname == NULL)
-        error (EXIT_FAILURE, errno, _("cannot determine hostname"));
-      printf ("%s\n", hostname);
-    }
+	if (argc <= optind) {
+		hostname = xgethostname ();
+		if (hostname == NULL)
+			error (EXIT_FAILURE, errno, _("cannot determine hostname"));
+		printf ("%s\n", hostname);
+	}
 
-  if (optind + 1 < argc)
-    {
-      error (0, 0, _("extra operand %s"), quote (argv[optind + 1]));
-      usage (EXIT_FAILURE);
-    }
+	if (optind + 1 < argc) {
+		error (0, 0, _("extra operand %s"), quote (argv[optind + 1]));
+		usage (EXIT_FAILURE);
+	}
 
-  exit (EXIT_SUCCESS);
+	exit (EXIT_SUCCESS);
 }
