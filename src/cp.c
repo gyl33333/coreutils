@@ -615,6 +615,41 @@ do_copy (int n_files, char **file, const char *target_directory,
              quoteaf (file[n_files - 1]));
     }
 
+  /* gprogress start */
+  if (gprogress) {
+	  gtotal_size = 0;
+
+	  int ifiles = n_files;
+	  if ( ! target_directory )
+		  ifiles = n_files - 1;
+	  int j;
+	  for (j = 0; j < ifiles; j++) {
+		  /* call du -s for each file */
+		  /* create command */
+		  char command[1024];
+		  sprintf ( command, "du -s \"%s\"", file[j] );
+		  /* TODO: replace all quote signs in file[i] */
+
+		  FILE *fp;
+		  char output[1024];
+
+		  /* run command */
+		  fp = popen(command, "r");
+		  if (fp == NULL || fgets(output, sizeof(output) - 1, fp) == NULL) {
+			  printf("failed to run du.\n" );
+		  } else {
+			  /* isolate size */
+			  strchr ( output, '\t' )[0] = '\0';
+			  gtotal_size += atol ( output );
+		  }
+
+		  /* close */
+		  pclose(fp);
+	  }
+  }
+  /* gprogress end */
+
+
   if (target_directory)
     {
       /* cp file1...filen edir
@@ -929,7 +964,7 @@ main (int argc, char **argv)
   selinux_enabled = (0 < is_selinux_enabled ());
   cp_option_init (&x);
 
-  while ((c = getopt_long (argc, argv, "abdfHilLnprst:uvxPRS:TZ",
+  while ((c = getopt_long (argc, argv, "abdfgHilLnprst:uvxPRS:TZ",
                            long_opts, NULL))
          != -1)
     {
@@ -984,6 +1019,10 @@ main (int argc, char **argv)
 
         case 'f':
           x.unlink_dest_after_failed_open = true;
+          break;
+
+        case 'g':
+          gprogress = true;
           break;
 
         case 'H':

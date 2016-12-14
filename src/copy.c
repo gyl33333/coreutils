@@ -158,6 +158,38 @@ utimens_symlink (char const *file, struct timespec const *timespec)
   return err;
 }
 
+
+/* gprogress start */
+int file_size_format ( char * dest, long long int size, int count)
+{
+	int num = count;
+	double hsize = ( double ) size;
+	while ( hsize >= 1000. ) {
+		hsize /= 1024.;
+		num++;
+	}
+
+	/* get unit */
+	char  buf[10];
+	if ( num == 0 )
+		sprintf(buf, "B");
+	else if ( num == 1 )
+		sprintf(buf, "KB");
+	else if ( num == 2 )
+		sprintf(buf, "MB");
+	else if ( num == 3 )
+		sprintf(buf, "GB");
+	else if ( num == 4 )
+		sprintf(buf, "TB");
+	else
+		sprintf(buf, "N/A");
+
+	/* write number */
+	return sprintf ( dest, "%.1f %s", hsize, buf );
+}
+/* gprogress end */
+
+
 /* Attempt to punch a hole to avoid any permanent
    speculative preallocation on file systems such as XFS.
    Return values as per fallocate(2) except ENOSYS etc. are ignored.  */
@@ -223,6 +255,13 @@ sparse_copy (int src_fd, int dest_fd, char *buf, size_t buf_size,
              uintmax_t max_n_read, off_t *total_n_read,
              bool *last_write_made_hole)
 {
+	/* gprogress start */
+	char *progress_show = calloc(1024, 4);
+	char iprogress_buf[1024];
+	char total_buf[1024];
+	long double gtotal_percent;
+	/* gprogress end */
+
   *last_write_made_hole = false;
   *total_n_read = 0;
   bool make_hole = false;
@@ -306,6 +345,33 @@ sparse_copy (int src_fd, int dest_fd, char *buf, size_t buf_size,
 
           n_read -= csize;
           cbuf += csize;
+
+	  /* gprogress start */
+	  if (gprogress) {
+		  gtotal_written += csize / 1024;
+
+
+		  gtotal_percent = gtotal_written *100.F / gtotal_size;
+
+		  sprintf(progress_show, "[%.0LF%%][", gtotal_percent);
+
+		  file_size_format(iprogress_buf, gtotal_written, 1);
+		  file_size_format(total_buf,gtotal_size, 1);
+		  strncat(progress_show, iprogress_buf, strlen(iprogress_buf));
+		  strcat(progress_show, "/");
+		  strncat(progress_show, total_buf, strlen(total_buf));
+		  strcat(progress_show, "] ");
+
+		  strncat(progress_show, src_name, strlen(src_name));
+
+		  /* print the field */
+		  printf ("\033[?25l \033[K%s\n", progress_show);
+		  printf ("\r\033[1A");
+
+		  fflush (stdout);
+
+	  }
+	  /* gprogress end */
         }
 
       *last_write_made_hole = make_hole;
@@ -314,7 +380,15 @@ sparse_copy (int src_fd, int dest_fd, char *buf, size_t buf_size,
          a regular file.  That would save the final read syscall
          for each file.  Unfortunately that doesn't work for
          certain files in /proc or /sys with linux kernels.  */
+
     }
+
+  /* gprogress start */
+      if (gprogress) {
+	      free ( progress_show );
+	      printf("\33[?25h");
+      }
+      /* gprogress end */
 
   /* Ensure a trailing hole is created, so that subsequent
      calls of sparse_copy() start at the correct offset.  */
