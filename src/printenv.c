@@ -1,5 +1,5 @@
 /* printenv -- print all or part of environment
-   Copyright (C) 1989-2013 Free Software Foundation, Inc.
+   Copyright (C) 1989-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -44,100 +44,111 @@ enum { PRINTENV_FAILURE = 2 };
   proper_name ("David MacKenzie"), \
   proper_name ("Richard Mlynarik")
 
-static struct option const longopts[] = {
-	{"null", no_argument, NULL, '0'},
-	{GETOPT_HELP_OPTION_DECL},
-	{GETOPT_VERSION_OPTION_DECL},
-	{NULL, 0, NULL, 0}
+static struct option const longopts[] =
+{
+  {"null", no_argument, NULL, '0'},
+  {GETOPT_HELP_OPTION_DECL},
+  {GETOPT_VERSION_OPTION_DECL},
+  {NULL, 0, NULL, 0}
 };
 
 void
 usage (int status)
 {
-	if (status != EXIT_SUCCESS)
-		emit_try_help ();
-	else {
-		printf (_("\
+  if (status != EXIT_SUCCESS)
+    emit_try_help ();
+  else
+    {
+      printf (_("\
 Usage: %s [OPTION]... [VARIABLE]...\n\
 Print the values of the specified environment VARIABLE(s).\n\
 If no VARIABLE is specified, print name and value pairs for them all.\n\
 \n\
 "),
-				program_name);
-		fputs (_("\
-  -0, --null     end each output line with 0 byte rather than newline\n\
+              program_name);
+      fputs (_("\
+  -0, --null     end each output line with NUL, not newline\n\
 "), stdout);
-		fputs (HELP_OPTION_DESCRIPTION, stdout);
-		fputs (VERSION_OPTION_DESCRIPTION, stdout);
-		printf (USAGE_BUILTIN_WARNING, PROGRAM_NAME);
-		emit_ancillary_info ();
-	}
-	exit (status);
+      fputs (HELP_OPTION_DESCRIPTION, stdout);
+      fputs (VERSION_OPTION_DESCRIPTION, stdout);
+      printf (USAGE_BUILTIN_WARNING, PROGRAM_NAME);
+      emit_ancillary_info (PROGRAM_NAME);
+    }
+  exit (status);
 }
 
 int
 main (int argc, char **argv)
 {
-	char **env;
-	char *ep, *ap;
-	int i;
-	bool ok;
-	int optc;
-	bool opt_nul_terminate_output = false;
+  char **env;
+  char *ep, *ap;
+  int i;
+  bool ok;
+  int optc;
+  bool opt_nul_terminate_output = false;
 
-	initialize_main (&argc, &argv);
-	set_program_name (argv[0]);
-	setlocale (LC_ALL, "");
-	bindtextdomain (PACKAGE, LOCALEDIR);
-	textdomain (PACKAGE);
+  initialize_main (&argc, &argv);
+  set_program_name (argv[0]);
+  setlocale (LC_ALL, "");
+  bindtextdomain (PACKAGE, LOCALEDIR);
+  textdomain (PACKAGE);
 
-	initialize_exit_failure (PRINTENV_FAILURE);
-	atexit (close_stdout);
+  initialize_exit_failure (PRINTENV_FAILURE);
+  atexit (close_stdout);
 
-	while ((optc = getopt_long (argc, argv, "+iu:0", longopts, NULL)) != -1) {
-		switch (optc) {
-		case '0':
-			opt_nul_terminate_output = true;
-			break;
-			case_GETOPT_HELP_CHAR;
-			case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
-		default:
-			usage (PRINTENV_FAILURE);
-		}
-	}
+  while ((optc = getopt_long (argc, argv, "+iu:0", longopts, NULL)) != -1)
+    {
+      switch (optc)
+        {
+        case '0':
+          opt_nul_terminate_output = true;
+          break;
+        case_GETOPT_HELP_CHAR;
+        case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
+        default:
+          usage (PRINTENV_FAILURE);
+        }
+    }
 
-	if (optind >= argc) {
-		for (env = environ; *env != NULL; ++env)
-			printf ("%s%c", *env, opt_nul_terminate_output ? '\0' : '\n');
-		ok = true;
-	} else {
-		int matches = 0;
+  if (optind >= argc)
+    {
+      for (env = environ; *env != NULL; ++env)
+        printf ("%s%c", *env, opt_nul_terminate_output ? '\0' : '\n');
+      ok = true;
+    }
+  else
+    {
+      int matches = 0;
 
-		for (i = optind; i < argc; ++i) {
-			bool matched = false;
+      for (i = optind; i < argc; ++i)
+        {
+          bool matched = false;
 
-			/* 'printenv a=b' is silent, even if 'a=b=c' is in environ.  */
-			if (strchr (argv[i], '='))
-				continue;
+          /* 'printenv a=b' is silent, even if 'a=b=c' is in environ.  */
+          if (strchr (argv[i], '='))
+            continue;
 
-			for (env = environ; *env; ++env) {
-				ep = *env;
-				ap = argv[i];
-				while (*ep != '\0' && *ap != '\0' && *ep++ == *ap++) {
-					if (*ep == '=' && *ap == '\0') {
-						printf ("%s%c", ep + 1,
-								opt_nul_terminate_output ? '\0' : '\n');
-						matched = true;
-						break;
-					}
-				}
-			}
+          for (env = environ; *env; ++env)
+            {
+              ep = *env;
+              ap = argv[i];
+              while (*ep != '\0' && *ap != '\0' && *ep++ == *ap++)
+                {
+                  if (*ep == '=' && *ap == '\0')
+                    {
+                      printf ("%s%c", ep + 1,
+                              opt_nul_terminate_output ? '\0' : '\n');
+                      matched = true;
+                      break;
+                    }
+                }
+            }
 
-			matches += matched;
-		}
+          matches += matched;
+        }
 
-		ok = (matches == argc - optind);
-	}
+      ok = (matches == argc - optind);
+    }
 
-	exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
+  return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

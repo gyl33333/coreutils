@@ -1,5 +1,5 @@
 /* getlimits - print various platform dependent limits.
-   Copyright (C) 2008-2013 Free Software Foundation, Inc.
+   Copyright (C) 2008-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -21,12 +21,13 @@
 #include <sys/types.h>
 #include <float.h>
 
+#include "ftoastr.h"
 #include "system.h"
 #include "long-options.h"
 
 #define PROGRAM_NAME "getlimits"
 
-#define AUTHORS proper_name_utf8 ("Padraig Brady", "P\303\241draig Brady")
+#define AUTHORS proper_name ("Padraig Brady")
 
 #ifndef TIME_T_MAX
 # define TIME_T_MAX TYPE_MAXIMUM (time_t)
@@ -58,22 +59,23 @@
 void
 usage (int status)
 {
-	if (status != EXIT_SUCCESS)
-		emit_try_help ();
-	else {
-		printf (_("\
+  if (status != EXIT_SUCCESS)
+    emit_try_help ();
+  else
+    {
+      printf (_("\
 Usage: %s\n\
 "), program_name);
 
-		fputs (_("\
+      fputs (_("\
 Output platform dependent limits in a format useful for shell scripts.\n\
 \n\
 "), stdout);
-		fputs (HELP_OPTION_DESCRIPTION, stdout);
-		fputs (VERSION_OPTION_DESCRIPTION, stdout);
-		emit_ancillary_info ();
-	}
-	exit (status);
+      fputs (HELP_OPTION_DESCRIPTION, stdout);
+      fputs (VERSION_OPTION_DESCRIPTION, stdout);
+      emit_ancillary_info (PROGRAM_NAME);
+    }
+  exit (status);
 }
 
 /* Add one to the absolute value of the number whose textual
@@ -83,36 +85,49 @@ Output platform dependent limits in a format useful for shell scripts.\n\
 static char const *
 decimal_absval_add_one (char *buf)
 {
-	bool negative = (buf[1] == '-');
-	char *absnum = buf + 1 + negative;
-	char *p = absnum + strlen (absnum);
-	absnum[-1] = '0';
-	while (*--p == '9')
-		*p = '0';
-	++*p;
-	char *result = MIN (absnum, p);
-	if (negative)
-		*--result = '-';
-	return result;
+  bool negative = (buf[1] == '-');
+  char *absnum = buf + 1 + negative;
+  char *p = absnum + strlen (absnum);
+  absnum[-1] = '0';
+  while (*--p == '9')
+    *p = '0';
+  ++*p;
+  char *result = MIN (absnum, p);
+  if (negative)
+    *--result = '-';
+  return result;
 }
+
+#define PRINT_FLOATTYPE(N, T, FTOASTR, BUFSIZE)                         \
+static void                                                             \
+N (T x)                                                                 \
+{                                                                       \
+  char buf[BUFSIZE];                                                    \
+  FTOASTR (buf, sizeof buf, FTOASTR_LEFT_JUSTIFY, 0, x);                \
+  puts (buf);                                                           \
+}
+
+PRINT_FLOATTYPE (print_FLT, float, ftoastr, FLT_BUFSIZE_BOUND)
+PRINT_FLOATTYPE (print_DBL, double, dtoastr, DBL_BUFSIZE_BOUND)
+PRINT_FLOATTYPE (print_LDBL, long double, ldtoastr, LDBL_BUFSIZE_BOUND)
 
 int
 main (int argc, char **argv)
 {
-	char limit[1 + MAX (INT_BUFSIZE_BOUND (intmax_t),
-						INT_BUFSIZE_BOUND (uintmax_t))];
+  char limit[1 + MAX (INT_BUFSIZE_BOUND (intmax_t),
+                      INT_BUFSIZE_BOUND (uintmax_t))];
 
-	initialize_main (&argc, &argv);
-	set_program_name (argv[0]);
-	setlocale (LC_ALL, "");
-	bindtextdomain (PACKAGE, LOCALEDIR);
-	textdomain (PACKAGE);
+  initialize_main (&argc, &argv);
+  set_program_name (argv[0]);
+  setlocale (LC_ALL, "");
+  bindtextdomain (PACKAGE, LOCALEDIR);
+  textdomain (PACKAGE);
 
-	initialize_exit_failure (EXIT_FAILURE);
-	atexit (close_stdout);
+  initialize_exit_failure (EXIT_FAILURE);
+  atexit (close_stdout);
 
-	parse_long_options (argc, argv, PROGRAM_NAME, PACKAGE_NAME, VERSION,
-						usage, AUTHORS, (char const *) NULL);
+  parse_long_options (argc, argv, PROGRAM_NAME, PACKAGE_NAME, VERSION,
+                      usage, AUTHORS, (char const *) NULL);
 
 #define print_int(TYPE)                                                  \
   sprintf (limit + 1, "%"PRIuMAX, (uintmax_t) TYPE##_MAX);               \
@@ -126,30 +141,32 @@ main (int argc, char **argv)
     }
 
 #define print_float(TYPE)                                                \
-  printf (#TYPE"_MIN=%Le\n", (long double)TYPE##_MIN);                   \
-  printf (#TYPE"_MAX=%Le\n", (long double)TYPE##_MAX);
+  printf (#TYPE"_MIN="); print_##TYPE (TYPE##_MIN);                      \
+  printf (#TYPE"_MAX="); print_##TYPE (TYPE##_MAX);
 
-	/* Variable sized ints */
-	print_int (CHAR);
-	print_int (SCHAR);
-	print_int (UCHAR);
-	print_int (SHRT);
-	print_int (INT);
-	print_int (UINT);
-	print_int (LONG);
-	print_int (ULONG);
-	print_int (SIZE);
-	print_int (SSIZE);
-	print_int (TIME_T);
-	print_int (UID_T);
-	print_int (GID_T);
-	print_int (PID_T);
-	print_int (OFF_T);
-	print_int (INTMAX);
-	print_int (UINTMAX);
+  /* Variable sized ints */
+  print_int (CHAR);
+  print_int (SCHAR);
+  print_int (UCHAR);
+  print_int (SHRT);
+  print_int (INT);
+  print_int (UINT);
+  print_int (LONG);
+  print_int (ULONG);
+  print_int (SIZE);
+  print_int (SSIZE);
+  print_int (TIME_T);
+  print_int (UID_T);
+  print_int (GID_T);
+  print_int (PID_T);
+  print_int (OFF_T);
+  print_int (INTMAX);
+  print_int (UINTMAX);
 
-	/* Variable sized floats */
-	print_float (FLT);
-	print_float (DBL);
-	print_float (LDBL);
+  /* Variable sized floats */
+  print_float (FLT);
+  print_float (DBL);
+  print_float (LDBL);
+
+  return EXIT_SUCCESS;
 }

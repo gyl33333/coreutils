@@ -1,5 +1,5 @@
 /* head -- output first part of file(s)
-   Copyright (C) 1989-2013 Free Software Foundation, Inc.
+   Copyright (C) 1989-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -31,12 +31,14 @@
 
 #include "system.h"
 
+#include "die.h"
 #include "error.h"
 #include "full-read.h"
 #include "quote.h"
 #include "safe-read.h"
+#include "stat-size.h"
 #include "xfreopen.h"
-#include "xstrtol.h"
+#include "xdectoint.h"
 
 /* The official name of this program (e.g., no 'g' prefix).  */
 #define PROGRAM_NAME "head"
@@ -57,483 +59,583 @@ static bool presume_input_pipe;
 /* If true, print filename headers. */
 static bool print_headers;
 
+/* Character to split lines by. */
+static char line_end;
+
 /* When to print the filename banners. */
-enum header_mode {
-	multiple_files, always, never
+enum header_mode
+{
+  multiple_files, always, never
 };
 
 /* Have we ever read standard input?  */
 static bool have_read_stdin;
 
-enum Copy_fd_status {
-	COPY_FD_OK = 0,
-	COPY_FD_READ_ERROR,
-	COPY_FD_WRITE_ERROR,
-	COPY_FD_UNEXPECTED_EOF
-};
+enum Copy_fd_status
+  {
+    COPY_FD_OK = 0,
+    COPY_FD_READ_ERROR,
+    COPY_FD_UNEXPECTED_EOF
+  };
 
 /* For long options that have no equivalent short option, use a
    non-character as a pseudo short option, starting with CHAR_MAX + 1.  */
-enum {
-	PRESUME_INPUT_PIPE_OPTION = CHAR_MAX + 1
+enum
+{
+  PRESUME_INPUT_PIPE_OPTION = CHAR_MAX + 1
 };
 
-static struct option const long_options[] = {
-	{"bytes", required_argument, NULL, 'c'},
-	{"lines", required_argument, NULL, 'n'},
-	{
-		"-presume-input-pipe", no_argument, NULL,
-		PRESUME_INPUT_PIPE_OPTION
-	}, /* do not document */
-	{"quiet", no_argument, NULL, 'q'},
-	{"silent", no_argument, NULL, 'q'},
-	{"verbose", no_argument, NULL, 'v'},
-	{GETOPT_HELP_OPTION_DECL},
-	{GETOPT_VERSION_OPTION_DECL},
-	{NULL, 0, NULL, 0}
+static struct option const long_options[] =
+{
+  {"bytes", required_argument, NULL, 'c'},
+  {"lines", required_argument, NULL, 'n'},
+  {"-presume-input-pipe", no_argument, NULL,
+   PRESUME_INPUT_PIPE_OPTION}, /* do not document */
+  {"quiet", no_argument, NULL, 'q'},
+  {"silent", no_argument, NULL, 'q'},
+  {"verbose", no_argument, NULL, 'v'},
+  {"zero-terminated", no_argument, NULL, 'z'},
+  {GETOPT_HELP_OPTION_DECL},
+  {GETOPT_VERSION_OPTION_DECL},
+  {NULL, 0, NULL, 0}
 };
 
 void
 usage (int status)
 {
-	if (status != EXIT_SUCCESS)
-		emit_try_help ();
-	else {
-		printf (_("\
+  if (status != EXIT_SUCCESS)
+    emit_try_help ();
+  else
+    {
+      printf (_("\
 Usage: %s [OPTION]... [FILE]...\n\
 "),
-				program_name);
-		fputs (_("\
-Print the first 10 lines of each FILE to standard output.\n\
+              program_name);
+      printf (_("\
+Print the first %d lines of each FILE to standard output.\n\
 With more than one FILE, precede each with a header giving the file name.\n\
-With no FILE, or when FILE is -, read standard input.\n\
-"), stdout);
+"), DEFAULT_NUMBER);
 
-		emit_mandatory_arg_note ();
+      emit_stdin_note ();
+      emit_mandatory_arg_note ();
 
-		fputs (_("\
-  -c, --bytes=[-]K         print the first K bytes of each file;\n\
+      printf (_("\
+  -c, --bytes=[-]NUM       print the first NUM bytes of each file;\n\
                              with the leading '-', print all but the last\n\
-                             K bytes of each file\n\
-  -n, --lines=[-]K         print the first K lines instead of the first 10;\n\
+                             NUM bytes of each file\n\
+  -n, --lines=[-]NUM       print the first NUM lines instead of the first %d;\n\
                              with the leading '-', print all but the last\n\
-                             K lines of each file\n\
-"), stdout);
-		fputs (_("\
+                             NUM lines of each file\n\
+"), DEFAULT_NUMBER);
+      fputs (_("\
   -q, --quiet, --silent    never print headers giving file names\n\
   -v, --verbose            always print headers giving file names\n\
 "), stdout);
-		fputs (HELP_OPTION_DESCRIPTION, stdout);
-		fputs (VERSION_OPTION_DESCRIPTION, stdout);
-		fputs (_("\
+      fputs (_("\
+  -z, --zero-terminated    line delimiter is NUL, not newline\n\
+"), stdout);
+      fputs (HELP_OPTION_DESCRIPTION, stdout);
+      fputs (VERSION_OPTION_DESCRIPTION, stdout);
+      fputs (_("\
 \n\
-K may have a multiplier suffix:\n\
+NUM may have a multiplier suffix:\n\
 b 512, kB 1000, K 1024, MB 1000*1000, M 1024*1024,\n\
 GB 1000*1000*1000, G 1024*1024*1024, and so on for T, P, E, Z, Y.\n\
 "), stdout);
-		emit_ancillary_info ();
-	}
-	exit (status);
+      emit_ancillary_info (PROGRAM_NAME);
+    }
+  exit (status);
 }
 
 static void
 diagnose_copy_fd_failure (enum Copy_fd_status err, char const *filename)
 {
-	switch (err) {
-	case COPY_FD_READ_ERROR:
-		error (0, errno, _("error reading %s"), quote (filename));
-		break;
-	case COPY_FD_WRITE_ERROR:
-		error (0, errno, _("error writing %s"), quote (filename));
-		break;
-	case COPY_FD_UNEXPECTED_EOF:
-		error (0, errno, _("%s: file has shrunk too much"), quote (filename));
-		break;
-	default:
-		abort ();
-	}
+  switch (err)
+    {
+    case COPY_FD_READ_ERROR:
+      error (0, errno, _("error reading %s"), quoteaf (filename));
+      break;
+    case COPY_FD_UNEXPECTED_EOF:
+      error (0, errno, _("%s: file has shrunk too much"), quotef (filename));
+      break;
+    default:
+      abort ();
+    }
 }
 
 static void
 write_header (const char *filename)
 {
-	static bool first_file = true;
+  static bool first_file = true;
 
-	printf ("%s==> %s <==\n", (first_file ? "" : "\n"), filename);
-	first_file = false;
+  printf ("%s==> %s <==\n", (first_file ? "" : "\n"), filename);
+  first_file = false;
 }
 
-/* Copy no more than N_BYTES from file descriptor SRC_FD to O_STREAM.
-   Return an appropriate indication of success or failure. */
+/* Write N_BYTES from BUFFER to stdout.
+   Exit immediately on error with a single diagnostic.  */
+
+static void
+xwrite_stdout (char const *buffer, size_t n_bytes)
+{
+  if (n_bytes > 0 && fwrite (buffer, 1, n_bytes, stdout) < n_bytes)
+    {
+      clearerr (stdout); /* To avoid redundant close_stdout diagnostic.  */
+      die (EXIT_FAILURE, errno, _("error writing %s"),
+           quoteaf ("standard output"));
+    }
+}
+
+/* Copy no more than N_BYTES from file descriptor SRC_FD to stdout.
+   Return an appropriate indication of success or read failure.  */
 
 static enum Copy_fd_status
-copy_fd (int src_fd, FILE *o_stream, uintmax_t n_bytes) {
-	char buf[BUFSIZ];
-	const size_t buf_size = sizeof (buf);
+copy_fd (int src_fd, uintmax_t n_bytes)
+{
+  char buf[BUFSIZ];
+  const size_t buf_size = sizeof (buf);
 
-	/* Copy the file contents.  */
-	while (0 < n_bytes)
-	{
-		size_t n_to_read = MIN (buf_size, n_bytes);
-		size_t n_read = safe_read (src_fd, buf, n_to_read);
-		if (n_read == SAFE_READ_ERROR)
-			return COPY_FD_READ_ERROR;
+  /* Copy the file contents.  */
+  while (0 < n_bytes)
+    {
+      size_t n_to_read = MIN (buf_size, n_bytes);
+      size_t n_read = safe_read (src_fd, buf, n_to_read);
+      if (n_read == SAFE_READ_ERROR)
+        return COPY_FD_READ_ERROR;
 
-		n_bytes -= n_read;
+      n_bytes -= n_read;
 
-		if (n_read == 0 && n_bytes != 0)
-			return COPY_FD_UNEXPECTED_EOF;
+      if (n_read == 0 && n_bytes != 0)
+        return COPY_FD_UNEXPECTED_EOF;
 
-		if (fwrite (buf, 1, n_read, o_stream) < n_read)
-			return COPY_FD_WRITE_ERROR;
-	}
+      xwrite_stdout (buf, n_read);
+    }
 
-	return COPY_FD_OK;
+  return COPY_FD_OK;
 }
 
-/* Print all but the last N_ELIDE lines from the input available via
-   the non-seekable file descriptor FD.  Return true upon success.
+/* Call lseek (FD, OFFSET, WHENCE), where file descriptor FD
+   corresponds to the file FILENAME.  WHENCE must be SEEK_SET or
+   SEEK_CUR.  Return the resulting offset.  Give a diagnostic and
+   return -1 if lseek fails.  */
+
+static off_t
+elseek (int fd, off_t offset, int whence, char const *filename)
+{
+  off_t new_offset = lseek (fd, offset, whence);
+  char buf[INT_BUFSIZE_BOUND (offset)];
+
+  if (new_offset < 0)
+    error (0, errno,
+           _(whence == SEEK_SET
+             ? N_("%s: cannot seek to offset %s")
+             : N_("%s: cannot seek to relative offset %s")),
+           quotef (filename),
+           offtostr (offset, buf));
+
+  return new_offset;
+}
+
+/* For an input file with name FILENAME and descriptor FD,
+   output all but the last N_ELIDE_0 bytes.
+   If CURRENT_POS is nonnegative, assume that the input file is
+   positioned at CURRENT_POS and that it should be repositioned to
+   just before the elided bytes before returning.
+   Return true upon success.
    Give a diagnostic and return false upon error.  */
 static bool
-elide_tail_bytes_pipe (const char *filename, int fd, uintmax_t n_elide_0)
+elide_tail_bytes_pipe (const char *filename, int fd, uintmax_t n_elide_0,
+                       off_t current_pos)
 {
-	size_t n_elide = n_elide_0;
+  size_t n_elide = n_elide_0;
+  uintmax_t desired_pos = current_pos;
+  bool ok = true;
 
 #ifndef HEAD_TAIL_PIPE_READ_BUFSIZE
 # define HEAD_TAIL_PIPE_READ_BUFSIZE BUFSIZ
 #endif
 #define READ_BUFSIZE HEAD_TAIL_PIPE_READ_BUFSIZE
 
-	/* If we're eliding no more than this many bytes, then it's ok to allocate
-	   more memory in order to use a more time-efficient algorithm.
-	   FIXME: use a fraction of available memory instead, as in sort.
-	   FIXME: is this even worthwhile?  */
+  /* If we're eliding no more than this many bytes, then it's ok to allocate
+     more memory in order to use a more time-efficient algorithm.
+     FIXME: use a fraction of available memory instead, as in sort.
+     FIXME: is this even worthwhile?  */
 #ifndef HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD
 # define HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD 1024 * 1024
 #endif
 
 #if HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD < 2 * READ_BUFSIZE
-	"HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD must be at least 2 * READ_BUFSIZE"
+  "HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD must be at least 2 * READ_BUFSIZE"
 #endif
 
-	if (SIZE_MAX < n_elide_0 + READ_BUFSIZE) {
-		char umax_buf[INT_BUFSIZE_BOUND (n_elide_0)];
-		error (EXIT_FAILURE, 0, _("%s: number of bytes is too large"),
-			   umaxtostr (n_elide_0, umax_buf));
-	}
+  if (SIZE_MAX < n_elide_0 + READ_BUFSIZE)
+    {
+      char umax_buf[INT_BUFSIZE_BOUND (n_elide_0)];
+      die (EXIT_FAILURE, 0, _("%s: number of bytes is too large"),
+           umaxtostr (n_elide_0, umax_buf));
+    }
 
-	/* Two cases to consider...
-	   1) n_elide is small enough that we can afford to double-buffer:
-	      allocate 2 * (READ_BUFSIZE + n_elide) bytes
-	   2) n_elide is too big for that, so we allocate only
-	      (READ_BUFSIZE + n_elide) bytes
+  /* Two cases to consider...
+     1) n_elide is small enough that we can afford to double-buffer:
+        allocate 2 * (READ_BUFSIZE + n_elide) bytes
+     2) n_elide is too big for that, so we allocate only
+        (READ_BUFSIZE + n_elide) bytes
 
-	   FIXME: profile, to see if double-buffering is worthwhile
+     FIXME: profile, to see if double-buffering is worthwhile
 
-	   CAUTION: do not fail (out of memory) when asked to elide
-	   a ridiculous amount, but when given only a small input.  */
+     CAUTION: do not fail (out of memory) when asked to elide
+     a ridiculous amount, but when given only a small input.  */
 
-	if (n_elide <= HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD) {
-		bool ok = true;
-		bool first = true;
-		bool eof = false;
-		size_t n_to_read = READ_BUFSIZE + n_elide;
-		bool i;
-		char *b[2];
-		b[0] = xnmalloc (2, n_to_read);
-		b[1] = b[0] + n_to_read;
+  if (n_elide <= HEAD_TAIL_PIPE_BYTECOUNT_THRESHOLD)
+    {
+      bool first = true;
+      bool eof = false;
+      size_t n_to_read = READ_BUFSIZE + n_elide;
+      bool i;
+      char *b[2];
+      b[0] = xnmalloc (2, n_to_read);
+      b[1] = b[0] + n_to_read;
 
-		for (i = false; ! eof ; i = !i) {
-			size_t n_read = full_read (fd, b[i], n_to_read);
-			size_t delta = 0;
-			if (n_read < n_to_read) {
-				if (errno != 0) {
-					error (0, errno, _("error reading %s"), quote (filename));
-					ok = false;
-					break;
-				}
+      for (i = false; ! eof ; i = !i)
+        {
+          size_t n_read = full_read (fd, b[i], n_to_read);
+          size_t delta = 0;
+          if (n_read < n_to_read)
+            {
+              if (errno != 0)
+                {
+                  error (0, errno, _("error reading %s"), quoteaf (filename));
+                  ok = false;
+                  break;
+                }
 
-				/* reached EOF */
-				if (n_read <= n_elide) {
-					if (first) {
-						/* The input is no larger than the number of bytes
-						   to elide.  So there's nothing to output, and
-						   we're done.  */
-					} else {
-						delta = n_elide - n_read;
-					}
-				}
-				eof = true;
-			}
+              /* reached EOF */
+              if (n_read <= n_elide)
+                {
+                  if (first)
+                    {
+                      /* The input is no larger than the number of bytes
+                         to elide.  So there's nothing to output, and
+                         we're done.  */
+                    }
+                  else
+                    {
+                      delta = n_elide - n_read;
+                    }
+                }
+              eof = true;
+            }
 
-			/* Output any (but maybe just part of the) elided data from
-			   the previous round.  */
-			if ( ! first) {
-				/* Don't bother checking for errors here.
-				   If there's a failure, the test of the following
-				   fwrite or in close_stdout will catch it.  */
-				fwrite (b[!i] + READ_BUFSIZE, 1, n_elide - delta, stdout);
-			}
-			first = false;
+          /* Output any (but maybe just part of the) elided data from
+             the previous round.  */
+          if (! first)
+            {
+              desired_pos += n_elide - delta;
+              xwrite_stdout (b[!i] + READ_BUFSIZE, n_elide - delta);
+            }
+          first = false;
 
-			if (n_elide < n_read
-				&& fwrite (b[i], 1, n_read - n_elide, stdout) < n_read - n_elide) {
-				error (0, errno, _("write error"));
-				ok = false;
-				break;
-			}
-		}
+          if (n_elide < n_read)
+            {
+              desired_pos += n_read - n_elide;
+              xwrite_stdout (b[i], n_read - n_elide);
+            }
+        }
 
-		free (b[0]);
-		return ok;
-	} else {
-		/* Read blocks of size READ_BUFSIZE, until we've read at least n_elide
-		   bytes.  Then, for each new buffer we read, also write an old one.  */
+      free (b[0]);
+    }
+  else
+    {
+      /* Read blocks of size READ_BUFSIZE, until we've read at least n_elide
+         bytes.  Then, for each new buffer we read, also write an old one.  */
 
-		bool ok = true;
-		bool eof = false;
-		size_t n_read;
-		bool buffered_enough;
-		size_t i, i_next;
-		char **b;
-		/* Round n_elide up to a multiple of READ_BUFSIZE.  */
-		size_t rem = READ_BUFSIZE - (n_elide % READ_BUFSIZE);
-		size_t n_elide_round = n_elide + rem;
-		size_t n_bufs = n_elide_round / READ_BUFSIZE + 1;
-		b = xcalloc (n_bufs, sizeof * b);
+      bool eof = false;
+      size_t n_read;
+      bool buffered_enough;
+      size_t i, i_next;
+      char **b = NULL;
+      /* Round n_elide up to a multiple of READ_BUFSIZE.  */
+      size_t rem = READ_BUFSIZE - (n_elide % READ_BUFSIZE);
+      size_t n_elide_round = n_elide + rem;
+      size_t n_bufs = n_elide_round / READ_BUFSIZE + 1;
+      size_t n_alloc = 0;
+      size_t n_array_alloc = 0;
 
-		buffered_enough = false;
-		for (i = 0, i_next = 1; !eof; i = i_next, i_next = (i_next + 1) % n_bufs) {
-			if (b[i] == NULL)
-				b[i] = xmalloc (READ_BUFSIZE);
-			n_read = full_read (fd, b[i], READ_BUFSIZE);
-			if (n_read < READ_BUFSIZE) {
-				if (errno != 0) {
-					error (0, errno, _("error reading %s"), quote (filename));
-					ok = false;
-					goto free_mem;
-				}
-				eof = true;
-			}
+      buffered_enough = false;
+      for (i = 0, i_next = 1; !eof; i = i_next, i_next = (i_next + 1) % n_bufs)
+        {
+          if (n_array_alloc == i)
+            {
+              /* reallocate between 16 and n_bufs entries.  */
+              if (n_array_alloc == 0)
+                n_array_alloc = MIN (n_bufs, 16);
+              else if (n_array_alloc <= n_bufs / 2)
+                n_array_alloc *= 2;
+              else
+                n_array_alloc = n_bufs;
+              b = xnrealloc (b, n_array_alloc, sizeof *b);
+            }
 
-			if (i + 1 == n_bufs)
-				buffered_enough = true;
+          if (! buffered_enough)
+            {
+              b[i] = xmalloc (READ_BUFSIZE);
+              n_alloc = i + 1;
+            }
+          n_read = full_read (fd, b[i], READ_BUFSIZE);
+          if (n_read < READ_BUFSIZE)
+            {
+              if (errno != 0)
+                {
+                  error (0, errno, _("error reading %s"), quoteaf (filename));
+                  ok = false;
+                  goto free_mem;
+                }
+              eof = true;
+            }
 
-			if (buffered_enough) {
-				if (fwrite (b[i_next], 1, n_read, stdout) < n_read) {
-					error (0, errno, _("write error"));
-					ok = false;
-					goto free_mem;
-				}
-			}
-		}
+          if (i + 1 == n_bufs)
+            buffered_enough = true;
 
-		/* Output any remainder: rem bytes from b[i] + n_read.  */
-		if (rem) {
-			if (buffered_enough) {
-				size_t n_bytes_left_in_b_i = READ_BUFSIZE - n_read;
-				if (rem < n_bytes_left_in_b_i) {
-					fwrite (b[i] + n_read, 1, rem, stdout);
-				} else {
-					fwrite (b[i] + n_read, 1, n_bytes_left_in_b_i, stdout);
-					fwrite (b[i_next], 1, rem - n_bytes_left_in_b_i, stdout);
-				}
-			} else if (i + 1 == n_bufs) {
-				/* This happens when n_elide < file_size < n_elide_round.
+          if (buffered_enough)
+            {
+              desired_pos += n_read;
+              xwrite_stdout (b[i_next], n_read);
+            }
+        }
 
-				   |READ_BUF.|
-				   |                      |  rem |
-				   |---------!---------!---------!---------|
-				   |---- n_elide ---------|
-				   |                      | x |
-				   |                   |y |
-				   |---- file size -----------|
-				   |                   |n_read|
-				   |---- n_elide_round ----------|
-				 */
-				size_t y = READ_BUFSIZE - rem;
-				size_t x = n_read - y;
-				fwrite (b[i_next], 1, x, stdout);
-			}
-		}
+      /* Output any remainder: rem bytes from b[i] + n_read.  */
+      if (rem)
+        {
+          if (buffered_enough)
+            {
+              size_t n_bytes_left_in_b_i = READ_BUFSIZE - n_read;
+              desired_pos += rem;
+              if (rem < n_bytes_left_in_b_i)
+                {
+                  xwrite_stdout (b[i] + n_read, rem);
+                }
+              else
+                {
+                  xwrite_stdout (b[i] + n_read, n_bytes_left_in_b_i);
+                  xwrite_stdout (b[i_next], rem - n_bytes_left_in_b_i);
+                }
+            }
+          else if (i + 1 == n_bufs)
+            {
+              /* This happens when n_elide < file_size < n_elide_round.
 
-free_mem:
-		for (i = 0; i < n_bufs; i++)
-			free (b[i]);
-		free (b);
+                 |READ_BUF.|
+                 |                      |  rem |
+                 |---------!---------!---------!---------|
+                 |---- n_elide ---------|
+                 |                      | x |
+                 |                   |y |
+                 |---- file size -----------|
+                 |                   |n_read|
+                 |---- n_elide_round ----------|
+               */
+              size_t y = READ_BUFSIZE - rem;
+              size_t x = n_read - y;
+              desired_pos += x;
+              xwrite_stdout (b[i_next], x);
+            }
+        }
 
-		return ok;
-	}
+    free_mem:
+      for (i = 0; i < n_alloc; i++)
+        free (b[i]);
+      free (b);
+    }
+
+  if (0 <= current_pos && elseek (fd, desired_pos, SEEK_SET, filename) < 0)
+    ok = false;
+  return ok;
 }
 
-/* Print all but the last N_ELIDE lines from the input available
-   via file descriptor FD.  Return true upon success.
+/* For the file FILENAME with descriptor FD, output all but the last N_ELIDE
+   bytes.  If SIZE is nonnegative, this is a regular file positioned
+   at CURRENT_POS with SIZE bytes.  Return true on success.
    Give a diagnostic and return false upon error.  */
 
 /* NOTE: if the input file shrinks by more than N_ELIDE bytes between
    the length determination and the actual reading, then head fails.  */
 
 static bool
-elide_tail_bytes_file (const char *filename, int fd, uintmax_t n_elide)
+elide_tail_bytes_file (const char *filename, int fd, uintmax_t n_elide,
+                       struct stat const *st, off_t current_pos)
 {
-	struct stat stats;
+  off_t size = st->st_size;
+  if (presume_input_pipe || current_pos < 0 || size <= ST_BLKSIZE (*st))
+    return elide_tail_bytes_pipe (filename, fd, n_elide, current_pos);
+  else
+    {
+      /* Be careful here.  The current position may actually be
+         beyond the end of the file.  */
+      off_t diff = size - current_pos;
+      off_t bytes_remaining = diff < 0 ? 0 : diff;
 
-	if (presume_input_pipe || fstat (fd, &stats) || ! S_ISREG (stats.st_mode)) {
-		return elide_tail_bytes_pipe (filename, fd, n_elide);
-	} else {
-		off_t current_pos, end_pos;
-		uintmax_t bytes_remaining;
-		off_t diff;
-		enum Copy_fd_status err;
+      if (bytes_remaining <= n_elide)
+        return true;
 
-		if ((current_pos = lseek (fd, 0, SEEK_CUR)) == -1
-			|| (end_pos = lseek (fd, 0, SEEK_END)) == -1) {
-			error (0, errno, _("cannot lseek %s"), quote (filename));
-			return false;
-		}
+      enum Copy_fd_status err = copy_fd (fd, bytes_remaining - n_elide);
+      if (err == COPY_FD_OK)
+        return true;
 
-		/* Be careful here.  The current position may actually be
-		   beyond the end of the file.  */
-		bytes_remaining = (diff = end_pos - current_pos) < 0 ? 0 : diff;
-
-		if (bytes_remaining <= n_elide)
-			return true;
-
-		/* Seek back to 'current' position, then copy the required
-		   number of bytes from fd.  */
-		if (lseek (fd, 0, current_pos) == -1) {
-			error (0, errno, _("%s: cannot lseek back to original position"),
-				   quote (filename));
-			return false;
-		}
-
-		err = copy_fd (fd, stdout, bytes_remaining - n_elide);
-		if (err == COPY_FD_OK)
-			return true;
-
-		diagnose_copy_fd_failure (err, filename);
-		return false;
-	}
+      diagnose_copy_fd_failure (err, filename);
+      return false;
+    }
 }
 
-/* Print all but the last N_ELIDE lines from the input stream
-   open for reading via file descriptor FD.
+/* For an input file with name FILENAME and descriptor FD,
+   output all but the last N_ELIDE_0 bytes.
+   If CURRENT_POS is nonnegative, the input file is positioned there
+   and should be repositioned to just before the elided bytes.
    Buffer the specified number of lines as a linked list of LBUFFERs,
    adding them as needed.  Return true if successful.  */
 
 static bool
-elide_tail_lines_pipe (const char *filename, int fd, uintmax_t n_elide)
+elide_tail_lines_pipe (const char *filename, int fd, uintmax_t n_elide,
+                       off_t current_pos)
 {
-	struct linebuffer {
-		char buffer[BUFSIZ];
-		size_t nbytes;
-		size_t nlines;
-		struct linebuffer *next;
-	};
-	typedef struct linebuffer LBUFFER;
-	LBUFFER *first, *last, *tmp;
-	size_t total_lines = 0;	/* Total number of newlines in all buffers.  */
-	bool ok = true;
-	size_t n_read;		/* Size in bytes of most recent read */
+  struct linebuffer
+  {
+    char buffer[BUFSIZ];
+    size_t nbytes;
+    size_t nlines;
+    struct linebuffer *next;
+  };
+  uintmax_t desired_pos = current_pos;
+  typedef struct linebuffer LBUFFER;
+  LBUFFER *first, *last, *tmp;
+  size_t total_lines = 0;	/* Total number of newlines in all buffers.  */
+  bool ok = true;
+  size_t n_read;		/* Size in bytes of most recent read */
 
-	first = last = xmalloc (sizeof (LBUFFER));
-	first->nbytes = first->nlines = 0;
-	first->next = NULL;
-	tmp = xmalloc (sizeof (LBUFFER));
+  first = last = xmalloc (sizeof (LBUFFER));
+  first->nbytes = first->nlines = 0;
+  first->next = NULL;
+  tmp = xmalloc (sizeof (LBUFFER));
 
-	/* Always read into a fresh buffer.
-	   Read, (producing no output) until we've accumulated at least
-	   n_elide newlines, or until EOF, whichever comes first.  */
-	while (1) {
-		n_read = safe_read (fd, tmp->buffer, BUFSIZ);
-		if (n_read == 0 || n_read == SAFE_READ_ERROR)
-			break;
-		tmp->nbytes = n_read;
-		tmp->nlines = 0;
-		tmp->next = NULL;
+  /* Always read into a fresh buffer.
+     Read, (producing no output) until we've accumulated at least
+     n_elide newlines, or until EOF, whichever comes first.  */
+  while (1)
+    {
+      n_read = safe_read (fd, tmp->buffer, BUFSIZ);
+      if (n_read == 0 || n_read == SAFE_READ_ERROR)
+        break;
 
-		/* Count the number of newlines just read.  */
-		{
-			char const *buffer_end = tmp->buffer + n_read;
-			char const *p = tmp->buffer;
-			while ((p = memchr (p, '\n', buffer_end - p))) {
-				++p;
-				++tmp->nlines;
-			}
-		}
-		total_lines += tmp->nlines;
+      if (! n_elide)
+        {
+          desired_pos += n_read;
+          xwrite_stdout (tmp->buffer, n_read);
+          continue;
+        }
 
-		/* If there is enough room in the last buffer read, just append the new
-		   one to it.  This is because when reading from a pipe, 'n_read' can
-		   often be very small.  */
-		if (tmp->nbytes + last->nbytes < BUFSIZ) {
-			memcpy (&last->buffer[last->nbytes], tmp->buffer, tmp->nbytes);
-			last->nbytes += tmp->nbytes;
-			last->nlines += tmp->nlines;
-		} else {
-			/* If there's not enough room, link the new buffer onto the end of
-			   the list, then either free up the oldest buffer for the next
-			   read if that would leave enough lines, or else malloc a new one.
-			   Some compaction mechanism is possible but probably not
-			   worthwhile.  */
-			last = last->next = tmp;
-			if (n_elide < total_lines - first->nlines) {
-				fwrite (first->buffer, 1, first->nbytes, stdout);
-				tmp = first;
-				total_lines -= first->nlines;
-				first = first->next;
-			} else
-				tmp = xmalloc (sizeof (LBUFFER));
-		}
-	}
+      tmp->nbytes = n_read;
+      tmp->nlines = 0;
+      tmp->next = NULL;
 
-	free (tmp);
+      /* Count the number of newlines just read.  */
+      {
+        char const *buffer_end = tmp->buffer + n_read;
+        char const *p = tmp->buffer;
+        while ((p = memchr (p, line_end, buffer_end - p)))
+          {
+            ++p;
+            ++tmp->nlines;
+          }
+      }
+      total_lines += tmp->nlines;
 
-	if (n_read == SAFE_READ_ERROR) {
-		error (0, errno, _("error reading %s"), quote (filename));
-		ok = false;
-		goto free_lbuffers;
-	}
+      /* If there is enough room in the last buffer read, just append the new
+         one to it.  This is because when reading from a pipe, 'n_read' can
+         often be very small.  */
+      if (tmp->nbytes + last->nbytes < BUFSIZ)
+        {
+          memcpy (&last->buffer[last->nbytes], tmp->buffer, tmp->nbytes);
+          last->nbytes += tmp->nbytes;
+          last->nlines += tmp->nlines;
+        }
+      else
+        {
+          /* If there's not enough room, link the new buffer onto the end of
+             the list, then either free up the oldest buffer for the next
+             read if that would leave enough lines, or else malloc a new one.
+             Some compaction mechanism is possible but probably not
+             worthwhile.  */
+          last = last->next = tmp;
+          if (n_elide < total_lines - first->nlines)
+            {
+              desired_pos += first->nbytes;
+              xwrite_stdout (first->buffer, first->nbytes);
+              tmp = first;
+              total_lines -= first->nlines;
+              first = first->next;
+            }
+          else
+            tmp = xmalloc (sizeof (LBUFFER));
+        }
+    }
 
-	/* If we read any bytes at all, count the incomplete line
-	   on files that don't end with a newline.  */
-	if (last->nbytes && last->buffer[last->nbytes - 1] != '\n') {
-		++last->nlines;
-		++total_lines;
-	}
+  free (tmp);
 
-	for (tmp = first; n_elide < total_lines - tmp->nlines; tmp = tmp->next) {
-		fwrite (tmp->buffer, 1, tmp->nbytes, stdout);
-		total_lines -= tmp->nlines;
-	}
+  if (n_read == SAFE_READ_ERROR)
+    {
+      error (0, errno, _("error reading %s"), quoteaf (filename));
+      ok = false;
+      goto free_lbuffers;
+    }
 
-	/* Print the first 'total_lines - n_elide' lines of tmp->buffer.  */
-	if (n_elide < total_lines) {
-		size_t n = total_lines - n_elide;
-		char const *buffer_end = tmp->buffer + tmp->nbytes;
-		char const *p = tmp->buffer;
-		while (n && (p = memchr (p, '\n', buffer_end - p))) {
-			++p;
-			++tmp->nlines;
-			--n;
-		}
-		fwrite (tmp->buffer, 1, p - tmp->buffer, stdout);
-	}
+  /* If we read any bytes at all, count the incomplete line
+     on files that don't end with a newline.  */
+  if (last->nbytes && last->buffer[last->nbytes - 1] != line_end)
+    {
+      ++last->nlines;
+      ++total_lines;
+    }
+
+  for (tmp = first; n_elide < total_lines - tmp->nlines; tmp = tmp->next)
+    {
+      desired_pos += tmp->nbytes;
+      xwrite_stdout (tmp->buffer, tmp->nbytes);
+      total_lines -= tmp->nlines;
+    }
+
+  /* Print the first 'total_lines - n_elide' lines of tmp->buffer.  */
+  if (n_elide < total_lines)
+    {
+      size_t n = total_lines - n_elide;
+      char const *buffer_end = tmp->buffer + tmp->nbytes;
+      char const *p = tmp->buffer;
+      while (n && (p = memchr (p, line_end, buffer_end - p)))
+        {
+          ++p;
+          ++tmp->nlines;
+          --n;
+        }
+      desired_pos += p - tmp->buffer;
+      xwrite_stdout (tmp->buffer, p - tmp->buffer);
+    }
 
 free_lbuffers:
-	while (first) {
-		tmp = first->next;
-		free (first);
-		first = tmp;
-	}
-	return ok;
+  while (first)
+    {
+      tmp = first->next;
+      free (first);
+      first = tmp;
+    }
+
+  if (0 <= current_pos && elseek (fd, desired_pos, SEEK_SET, filename) < 0)
+    ok = false;
+  return ok;
 }
 
 /* Output all but the last N_LINES lines of the input stream defined by
-   FD, START_POS, and END_POS.
+   FD, START_POS, and SIZE.
    START_POS is the starting position of the read pointer for the file
    associated with FD (may be nonzero).
-   END_POS is the file offset of EOF (one larger than offset of last byte).
+   SIZE is the file size in bytes.
    Return true upon success.
    Give a diagnostic and return false upon error.
 
@@ -542,252 +644,263 @@ free_lbuffers:
    in a less efficient implementation or a messy interface.  */
 static bool
 elide_tail_lines_seekable (const char *pretty_filename, int fd,
-						   uintmax_t n_lines,
-						   off_t start_pos, off_t end_pos)
+                           uintmax_t n_lines,
+                           off_t start_pos, off_t size)
 {
-	char buffer[BUFSIZ];
-	size_t bytes_read;
-	off_t pos = end_pos;
+  char buffer[BUFSIZ];
+  size_t bytes_read;
+  off_t pos = size;
 
-	/* Set 'bytes_read' to the size of the last, probably partial, buffer;
-	   0 < 'bytes_read' <= 'BUFSIZ'.  */
-	bytes_read = (pos - start_pos) % BUFSIZ;
-	if (bytes_read == 0)
-		bytes_read = BUFSIZ;
-	/* Make 'pos' a multiple of 'BUFSIZ' (0 if the file is short), so that all
-	   reads will be on block boundaries, which might increase efficiency.  */
-	pos -= bytes_read;
-	if (lseek (fd, pos, SEEK_SET) < 0) {
-		char offset_buf[INT_BUFSIZE_BOUND (pos)];
-		error (0, errno, _("%s: cannot seek to offset %s"),
-			   pretty_filename, offtostr (pos, offset_buf));
-		return false;
-	}
-	bytes_read = safe_read (fd, buffer, bytes_read);
-	if (bytes_read == SAFE_READ_ERROR) {
-		error (0, errno, _("error reading %s"), quote (pretty_filename));
-		return false;
-	}
+  /* Set 'bytes_read' to the size of the last, probably partial, buffer;
+     0 < 'bytes_read' <= 'BUFSIZ'.  */
+  bytes_read = (pos - start_pos) % BUFSIZ;
+  if (bytes_read == 0)
+    bytes_read = BUFSIZ;
+  /* Make 'pos' a multiple of 'BUFSIZ' (0 if the file is short), so that all
+     reads will be on block boundaries, which might increase efficiency.  */
+  pos -= bytes_read;
+  if (elseek (fd, pos, SEEK_SET, pretty_filename) < 0)
+    return false;
+  bytes_read = safe_read (fd, buffer, bytes_read);
+  if (bytes_read == SAFE_READ_ERROR)
+    {
+      error (0, errno, _("error reading %s"), quoteaf (pretty_filename));
+      return false;
+    }
 
-	/* Count the incomplete line on files that don't end with a newline.  */
-	if (bytes_read && buffer[bytes_read - 1] != '\n')
-		--n_lines;
+  /* n_lines == 0 case needs special treatment. */
+  const bool all_lines = !n_lines;
 
-	while (1) {
-		/* Scan backward, counting the newlines in this bufferfull.  */
+  /* Count the incomplete line on files that don't end with a newline.  */
+  if (n_lines && bytes_read && buffer[bytes_read - 1] != line_end)
+    --n_lines;
 
-		size_t n = bytes_read;
-		while (n) {
-			char const *nl;
-			nl = memrchr (buffer, '\n', n);
-			if (nl == NULL)
-				break;
-			n = nl - buffer;
-			if (n_lines-- == 0) {
-				/* Found it.  */
-				/* If necessary, restore the file pointer and copy
-				   input to output up to position, POS.  */
-				if (start_pos < pos) {
-					enum Copy_fd_status err;
-					if (lseek (fd, start_pos, SEEK_SET) < 0) {
-						/* Failed to reposition file pointer.  */
-						error (0, errno,
-							   "%s: unable to restore file pointer to initial offset",
-							   quote (pretty_filename));
-						return false;
-					}
+  while (1)
+    {
+      /* Scan backward, counting the newlines in this bufferfull.  */
 
-					err = copy_fd (fd, stdout, pos - start_pos);
-					if (err != COPY_FD_OK) {
-						diagnose_copy_fd_failure (err, pretty_filename);
-						return false;
-					}
-				}
+      size_t n = bytes_read;
+      while (n)
+        {
+          if (all_lines)
+            n -= 1;
+          else
+            {
+              char const *nl;
+              nl = memrchr (buffer, line_end, n);
+              if (nl == NULL)
+                break;
+              n = nl - buffer;
+            }
+          if (n_lines-- == 0)
+            {
+              /* Found it.  */
+              /* If necessary, restore the file pointer and copy
+                 input to output up to position, POS.  */
+              if (start_pos < pos)
+                {
+                  enum Copy_fd_status err;
+                  if (elseek (fd, start_pos, SEEK_SET, pretty_filename) < 0)
+                    return false;
 
-				/* Output the initial portion of the buffer
-				   in which we found the desired newline byte.
-				   Don't bother testing for failure for such a small amount.
-				   Any failure will be detected upon close.  */
-				fwrite (buffer, 1, n + 1, stdout);
+                  err = copy_fd (fd, pos - start_pos);
+                  if (err != COPY_FD_OK)
+                    {
+                      diagnose_copy_fd_failure (err, pretty_filename);
+                      return false;
+                    }
+                }
 
-				/* Set file pointer to the byte after what we've output.  */
-				if (lseek (fd, pos + n + 1, SEEK_SET) < 0) {
-					error (0, errno, _("%s: failed to reset file pointer"),
-						   quote (pretty_filename));
-					return false;
-				}
-				return true;
-			}
-		}
+              /* Output the initial portion of the buffer
+                 in which we found the desired newline byte.  */
+              xwrite_stdout (buffer, n + 1);
 
-		/* Not enough newlines in that bufferfull.  */
-		if (pos == start_pos) {
-			/* Not enough lines in the file.  */
-			return true;
-		}
-		pos -= BUFSIZ;
-		if (lseek (fd, pos, SEEK_SET) < 0) {
-			char offset_buf[INT_BUFSIZE_BOUND (pos)];
-			error (0, errno, _("%s: cannot seek to offset %s"),
-				   pretty_filename, offtostr (pos, offset_buf));
-			return false;
-		}
+              /* Set file pointer to the byte after what we've output.  */
+              return 0 <= elseek (fd, pos + n + 1, SEEK_SET, pretty_filename);
+            }
+        }
 
-		bytes_read = safe_read (fd, buffer, BUFSIZ);
-		if (bytes_read == SAFE_READ_ERROR) {
-			error (0, errno, _("error reading %s"), quote (pretty_filename));
-			return false;
-		}
+      /* Not enough newlines in that bufferfull.  */
+      if (pos == start_pos)
+        {
+          /* Not enough lines in the file.  */
+          return true;
+        }
+      pos -= BUFSIZ;
+      if (elseek (fd, pos, SEEK_SET, pretty_filename) < 0)
+        return false;
 
-		/* FIXME: is this dead code?
-		   Consider the test, pos == start_pos, above. */
-		if (bytes_read == 0)
-			return true;
-	}
+      bytes_read = safe_read (fd, buffer, BUFSIZ);
+      if (bytes_read == SAFE_READ_ERROR)
+        {
+          error (0, errno, _("error reading %s"), quoteaf (pretty_filename));
+          return false;
+        }
+
+      /* FIXME: is this dead code?
+         Consider the test, pos == start_pos, above. */
+      if (bytes_read == 0)
+        return true;
+    }
 }
 
-/* Print all but the last N_ELIDE lines from the input available
-   via file descriptor FD.  Return true upon success.
+/* For the file FILENAME with descriptor FD, output all but the last N_ELIDE
+   lines.  If SIZE is nonnegative, this is a regular file positioned
+   at START_POS with SIZE bytes.  Return true on success.
    Give a diagnostic and return nonzero upon error.  */
 
 static bool
-elide_tail_lines_file (const char *filename, int fd, uintmax_t n_elide)
+elide_tail_lines_file (const char *filename, int fd, uintmax_t n_elide,
+                       struct stat const *st, off_t current_pos)
 {
-	if (!presume_input_pipe) {
-		/* Find the offset, OFF, of the Nth newline from the end,
-		   but not counting the last byte of the file.
-		   If found, write from current position to OFF, inclusive.
-		   Otherwise, just return true.  */
+  off_t size = st->st_size;
+  if (presume_input_pipe || current_pos < 0 || size <= ST_BLKSIZE (*st))
+    return elide_tail_lines_pipe (filename, fd, n_elide, current_pos);
+  else
+    {
+      /* Find the offset, OFF, of the Nth newline from the end,
+         but not counting the last byte of the file.
+         If found, write from current position to OFF, inclusive.
+         Otherwise, just return true.  */
 
-		off_t start_pos = lseek (fd, 0, SEEK_CUR);
-		off_t end_pos = lseek (fd, 0, SEEK_END);
-		if (0 <= start_pos && start_pos < end_pos) {
-			/* If the file is empty, we're done.  */
-			if (end_pos == 0)
-				return true;
-
-			return elide_tail_lines_seekable (filename, fd, n_elide,
-											  start_pos, end_pos);
-		}
-
-		/* lseek failed or the end offset precedes start.
-		   Fall through.  */
-	}
-
-	return elide_tail_lines_pipe (filename, fd, n_elide);
+      return (size <= current_pos
+              || elide_tail_lines_seekable (filename, fd, n_elide,
+                                            current_pos, size));
+    }
 }
 
 static bool
 head_bytes (const char *filename, int fd, uintmax_t bytes_to_write)
 {
-	char buffer[BUFSIZ];
-	size_t bytes_to_read = BUFSIZ;
+  char buffer[BUFSIZ];
+  size_t bytes_to_read = BUFSIZ;
 
-	while (bytes_to_write) {
-		size_t bytes_read;
-		if (bytes_to_write < bytes_to_read)
-			bytes_to_read = bytes_to_write;
-		bytes_read = safe_read (fd, buffer, bytes_to_read);
-		if (bytes_read == SAFE_READ_ERROR) {
-			error (0, errno, _("error reading %s"), quote (filename));
-			return false;
-		}
-		if (bytes_read == 0)
-			break;
-		if (fwrite (buffer, 1, bytes_read, stdout) < bytes_read)
-			error (EXIT_FAILURE, errno, _("write error"));
-		bytes_to_write -= bytes_read;
-	}
-	return true;
+  while (bytes_to_write)
+    {
+      size_t bytes_read;
+      if (bytes_to_write < bytes_to_read)
+        bytes_to_read = bytes_to_write;
+      bytes_read = safe_read (fd, buffer, bytes_to_read);
+      if (bytes_read == SAFE_READ_ERROR)
+        {
+          error (0, errno, _("error reading %s"), quoteaf (filename));
+          return false;
+        }
+      if (bytes_read == 0)
+        break;
+      xwrite_stdout (buffer, bytes_read);
+      bytes_to_write -= bytes_read;
+    }
+  return true;
 }
 
 static bool
 head_lines (const char *filename, int fd, uintmax_t lines_to_write)
 {
-	char buffer[BUFSIZ];
+  char buffer[BUFSIZ];
 
-	while (lines_to_write) {
-		size_t bytes_read = safe_read (fd, buffer, BUFSIZ);
-		size_t bytes_to_write = 0;
+  while (lines_to_write)
+    {
+      size_t bytes_read = safe_read (fd, buffer, BUFSIZ);
+      size_t bytes_to_write = 0;
 
-		if (bytes_read == SAFE_READ_ERROR) {
-			error (0, errno, _("error reading %s"), quote (filename));
-			return false;
-		}
-		if (bytes_read == 0)
-			break;
-		while (bytes_to_write < bytes_read)
-			if (buffer[bytes_to_write++] == '\n' && --lines_to_write == 0) {
-				off_t n_bytes_past_EOL = bytes_read - bytes_to_write;
-				/* If we have read more data than that on the specified number
-				   of lines, try to seek back to the position we would have
-				   gotten to had we been reading one byte at a time.  */
-				if (lseek (fd, -n_bytes_past_EOL, SEEK_CUR) < 0) {
-					int e = errno;
-					struct stat st;
-					if (fstat (fd, &st) != 0 || S_ISREG (st.st_mode))
-						error (0, e, _("cannot reposition file pointer for %s"),
-							   quote (filename));
-				}
-				break;
-			}
-		if (fwrite (buffer, 1, bytes_to_write, stdout) < bytes_to_write)
-			error (EXIT_FAILURE, errno, _("write error"));
-	}
-	return true;
+      if (bytes_read == SAFE_READ_ERROR)
+        {
+          error (0, errno, _("error reading %s"), quoteaf (filename));
+          return false;
+        }
+      if (bytes_read == 0)
+        break;
+      while (bytes_to_write < bytes_read)
+        if (buffer[bytes_to_write++] == line_end && --lines_to_write == 0)
+          {
+            off_t n_bytes_past_EOL = bytes_read - bytes_to_write;
+            /* If we have read more data than that on the specified number
+               of lines, try to seek back to the position we would have
+               gotten to had we been reading one byte at a time.  */
+            if (lseek (fd, -n_bytes_past_EOL, SEEK_CUR) < 0)
+              {
+                struct stat st;
+                if (fstat (fd, &st) != 0 || S_ISREG (st.st_mode))
+                  elseek (fd, -n_bytes_past_EOL, SEEK_CUR, filename);
+              }
+            break;
+          }
+      xwrite_stdout (buffer, bytes_to_write);
+    }
+  return true;
 }
 
 static bool
 head (const char *filename, int fd, uintmax_t n_units, bool count_lines,
-	  bool elide_from_end)
+      bool elide_from_end)
 {
-	if (print_headers)
-		write_header (filename);
+  if (print_headers)
+    write_header (filename);
 
-	if (elide_from_end) {
-		if (count_lines) {
-			return elide_tail_lines_file (filename, fd, n_units);
-		} else {
-			return elide_tail_bytes_file (filename, fd, n_units);
-		}
-	}
-	if (count_lines)
-		return head_lines (filename, fd, n_units);
-	else
-		return head_bytes (filename, fd, n_units);
+  if (elide_from_end)
+    {
+      off_t current_pos = -1;
+      struct stat st;
+      if (fstat (fd, &st) != 0)
+        {
+          error (0, errno, _("cannot fstat %s"),
+                 quoteaf (filename));
+          return false;
+        }
+      if (! presume_input_pipe && usable_st_size (&st))
+        {
+          current_pos = elseek (fd, 0, SEEK_CUR, filename);
+          if (current_pos < 0)
+            return false;
+        }
+      if (count_lines)
+        return elide_tail_lines_file (filename, fd, n_units, &st, current_pos);
+      else
+        return elide_tail_bytes_file (filename, fd, n_units, &st, current_pos);
+    }
+  if (count_lines)
+    return head_lines (filename, fd, n_units);
+  else
+    return head_bytes (filename, fd, n_units);
 }
 
 static bool
 head_file (const char *filename, uintmax_t n_units, bool count_lines,
-		   bool elide_from_end)
+           bool elide_from_end)
 {
-	int fd;
-	bool ok;
-	bool is_stdin = STREQ (filename, "-");
+  int fd;
+  bool ok;
+  bool is_stdin = STREQ (filename, "-");
 
-	if (is_stdin) {
-		have_read_stdin = true;
-		fd = STDIN_FILENO;
-		filename = _("standard input");
-		if (O_BINARY && ! isatty (STDIN_FILENO))
-			xfreopen (NULL, "rb", stdin);
-	} else {
-		fd = open (filename, O_RDONLY | O_BINARY);
-		if (fd < 0) {
-			error (0, errno, _("cannot open %s for reading"), quote (filename));
-			return false;
-		}
-	}
+  if (is_stdin)
+    {
+      have_read_stdin = true;
+      fd = STDIN_FILENO;
+      filename = _("standard input");
+      if (O_BINARY && ! isatty (STDIN_FILENO))
+        xfreopen (NULL, "rb", stdin);
+    }
+  else
+    {
+      fd = open (filename, O_RDONLY | O_BINARY);
+      if (fd < 0)
+        {
+          error (0, errno, _("cannot open %s for reading"), quoteaf (filename));
+          return false;
+        }
+    }
 
-	ok = head (filename, fd, n_units, count_lines, elide_from_end);
-	if (!is_stdin && close (fd) != 0) {
-		error (0, errno, _("failed to close %s"), quote (filename));
-		return false;
-	}
-	return ok;
+  ok = head (filename, fd, n_units, count_lines, elide_from_end);
+  if (!is_stdin && close (fd) != 0)
+    {
+      error (0, errno, _("failed to close %s"), quoteaf (filename));
+      return false;
+    }
+  return ok;
 }
 
-/* Convert a string of decimal digits, N_STRING, with an optional suffinx
+/* Convert a string of decimal digits, N_STRING, with an optional suffix
    to an integral value.  Upon successful conversion,
    return that value.  If it cannot be converted, give a diagnostic and exit.
    COUNT_LINES indicates whether N_STRING is a number of bytes or a number
@@ -796,188 +909,188 @@ head_file (const char *filename, uintmax_t n_units, bool count_lines,
 static uintmax_t
 string_to_integer (bool count_lines, const char *n_string)
 {
-	strtol_error s_err;
-	uintmax_t n;
-
-	s_err = xstrtoumax (n_string, NULL, 10, &n, "bkKmMGTPEZY0");
-
-	if (s_err == LONGINT_OVERFLOW) {
-		error (EXIT_FAILURE, 0,
-			   _("%s: %s is so large that it is not representable"), n_string,
-			   count_lines ? _("number of lines") : _("number of bytes"));
-	}
-
-	if (s_err != LONGINT_OK) {
-		error (EXIT_FAILURE, 0, "%s: %s", n_string,
-			   (count_lines
-				? _("invalid number of lines")
-				: _("invalid number of bytes")));
-	}
-
-	return n;
+  return xdectoumax (n_string, 0, UINTMAX_MAX, "bkKmMGTPEZY0",
+                     count_lines ? _("invalid number of lines")
+                                 : _("invalid number of bytes"), 0);
 }
 
 int
 main (int argc, char **argv)
 {
-	enum header_mode header_mode = multiple_files;
-	bool ok = true;
-	int c;
-	size_t i;
+  enum header_mode header_mode = multiple_files;
+  bool ok = true;
+  int c;
+  size_t i;
 
-	/* Number of items to print. */
-	uintmax_t n_units = DEFAULT_NUMBER;
+  /* Number of items to print. */
+  uintmax_t n_units = DEFAULT_NUMBER;
 
-	/* If true, interpret the numeric argument as the number of lines.
-	   Otherwise, interpret it as the number of bytes.  */
-	bool count_lines = true;
+  /* If true, interpret the numeric argument as the number of lines.
+     Otherwise, interpret it as the number of bytes.  */
+  bool count_lines = true;
 
-	/* Elide the specified number of lines or bytes, counting from
-	   the end of the file.  */
-	bool elide_from_end = false;
+  /* Elide the specified number of lines or bytes, counting from
+     the end of the file.  */
+  bool elide_from_end = false;
 
-	/* Initializer for file_list if no file-arguments
-	   were specified on the command line.  */
-	static char const *const default_file_list[] = {"-", NULL};
-	char const *const *file_list;
+  /* Initializer for file_list if no file-arguments
+     were specified on the command line.  */
+  static char const *const default_file_list[] = {"-", NULL};
+  char const *const *file_list;
 
-	initialize_main (&argc, &argv);
-	set_program_name (argv[0]);
-	setlocale (LC_ALL, "");
-	bindtextdomain (PACKAGE, LOCALEDIR);
-	textdomain (PACKAGE);
+  initialize_main (&argc, &argv);
+  set_program_name (argv[0]);
+  setlocale (LC_ALL, "");
+  bindtextdomain (PACKAGE, LOCALEDIR);
+  textdomain (PACKAGE);
 
-	atexit (close_stdout);
+  atexit (close_stdout);
 
-	have_read_stdin = false;
+  have_read_stdin = false;
 
-	print_headers = false;
+  print_headers = false;
 
-	if (1 < argc && argv[1][0] == '-' && ISDIGIT (argv[1][1])) {
-		char *a = argv[1];
-		char *n_string = ++a;
-		char *end_n_string;
-		char multiplier_char = 0;
+  line_end = '\n';
 
-		/* Old option syntax; a dash, one or more digits, and one or
-		   more option letters.  Move past the number. */
-		do ++a;
-		while (ISDIGIT (*a));
+  if (1 < argc && argv[1][0] == '-' && ISDIGIT (argv[1][1]))
+    {
+      char *a = argv[1];
+      char *n_string = ++a;
+      char *end_n_string;
+      char multiplier_char = 0;
 
-		/* Pointer to the byte after the last digit.  */
-		end_n_string = a;
+      /* Old option syntax; a dash, one or more digits, and one or
+         more option letters.  Move past the number. */
+      do ++a;
+      while (ISDIGIT (*a));
 
-		/* Parse any appended option letters. */
-		for (; *a; a++) {
-			switch (*a) {
-			case 'c':
-				count_lines = false;
-				multiplier_char = 0;
-				break;
+      /* Pointer to the byte after the last digit.  */
+      end_n_string = a;
 
-			case 'b':
-			case 'k':
-			case 'm':
-				count_lines = false;
-				multiplier_char = *a;
-				break;
+      /* Parse any appended option letters. */
+      for (; *a; a++)
+        {
+          switch (*a)
+            {
+            case 'c':
+              count_lines = false;
+              multiplier_char = 0;
+              break;
 
-			case 'l':
-				count_lines = true;
-				break;
+            case 'b':
+            case 'k':
+            case 'm':
+              count_lines = false;
+              multiplier_char = *a;
+              break;
 
-			case 'q':
-				header_mode = never;
-				break;
+            case 'l':
+              count_lines = true;
+              break;
 
-			case 'v':
-				header_mode = always;
-				break;
+            case 'q':
+              header_mode = never;
+              break;
 
-			default:
-				error (0, 0, _("invalid trailing option -- %c"), *a);
-				usage (EXIT_FAILURE);
-			}
-		}
+            case 'v':
+              header_mode = always;
+              break;
 
-		/* Append the multiplier character (if any) onto the end of
-		   the digit string.  Then add NUL byte if necessary.  */
-		*end_n_string = multiplier_char;
-		if (multiplier_char)
-			*(++end_n_string) = 0;
+            case 'z':
+              line_end = '\0';
+              break;
 
-		n_units = string_to_integer (count_lines, n_string);
+            default:
+              error (0, 0, _("invalid trailing option -- %c"), *a);
+              usage (EXIT_FAILURE);
+            }
+        }
 
-		/* Make the options we just parsed invisible to getopt. */
-		argv[1] = argv[0];
-		argv++;
-		argc--;
-	}
+      /* Append the multiplier character (if any) onto the end of
+         the digit string.  Then add NUL byte if necessary.  */
+      *end_n_string = multiplier_char;
+      if (multiplier_char)
+        *(++end_n_string) = 0;
 
-	while ((c = getopt_long (argc, argv, "c:n:qv0123456789", long_options, NULL))
-		   != -1) {
-		switch (c) {
-		case PRESUME_INPUT_PIPE_OPTION:
-			presume_input_pipe = true;
-			break;
+      n_units = string_to_integer (count_lines, n_string);
 
-		case 'c':
-			count_lines = false;
-			elide_from_end = (*optarg == '-');
-			if (elide_from_end)
-				++optarg;
-			n_units = string_to_integer (count_lines, optarg);
-			break;
+      /* Make the options we just parsed invisible to getopt. */
+      argv[1] = argv[0];
+      argv++;
+      argc--;
+    }
 
-		case 'n':
-			count_lines = true;
-			elide_from_end = (*optarg == '-');
-			if (elide_from_end)
-				++optarg;
-			n_units = string_to_integer (count_lines, optarg);
-			break;
+  while ((c = getopt_long (argc, argv, "c:n:qvz0123456789", long_options, NULL))
+         != -1)
+    {
+      switch (c)
+        {
+        case PRESUME_INPUT_PIPE_OPTION:
+          presume_input_pipe = true;
+          break;
 
-		case 'q':
-			header_mode = never;
-			break;
+        case 'c':
+          count_lines = false;
+          elide_from_end = (*optarg == '-');
+          if (elide_from_end)
+            ++optarg;
+          n_units = string_to_integer (count_lines, optarg);
+          break;
 
-		case 'v':
-			header_mode = always;
-			break;
+        case 'n':
+          count_lines = true;
+          elide_from_end = (*optarg == '-');
+          if (elide_from_end)
+            ++optarg;
+          n_units = string_to_integer (count_lines, optarg);
+          break;
 
-			case_GETOPT_HELP_CHAR;
+        case 'q':
+          header_mode = never;
+          break;
 
-			case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
+        case 'v':
+          header_mode = always;
+          break;
 
-		default:
-			if (ISDIGIT (c))
-				error (0, 0, _("invalid trailing option -- %c"), c);
-			usage (EXIT_FAILURE);
-		}
-	}
+        case 'z':
+          line_end = '\0';
+          break;
 
-	if (header_mode == always
-		|| (header_mode == multiple_files && optind < argc - 1))
-		print_headers = true;
+        case_GETOPT_HELP_CHAR;
 
-	if ( ! count_lines && elide_from_end && OFF_T_MAX < n_units) {
-		char umax_buf[INT_BUFSIZE_BOUND (n_units)];
-		error (EXIT_FAILURE, 0, _("%s: number of bytes is too large"),
-			   umaxtostr (n_units, umax_buf));
-	}
+        case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
 
-	file_list = (optind < argc
-				 ? (char const * const *) &argv[optind]
-				 : default_file_list);
+        default:
+          if (ISDIGIT (c))
+            error (0, 0, _("invalid trailing option -- %c"), c);
+          usage (EXIT_FAILURE);
+        }
+    }
 
-	if (O_BINARY && ! isatty (STDOUT_FILENO))
-		xfreopen (NULL, "wb", stdout);
+  if (header_mode == always
+      || (header_mode == multiple_files && optind < argc - 1))
+    print_headers = true;
 
-	for (i = 0; file_list[i]; ++i)
-		ok &= head_file (file_list[i], n_units, count_lines, elide_from_end);
+  if ( ! count_lines && elide_from_end && OFF_T_MAX < n_units)
+    {
+      char umax_buf[INT_BUFSIZE_BOUND (n_units)];
+      die (EXIT_FAILURE, EOVERFLOW, "%s: %s", _("invalid number of bytes"),
+           quote (umaxtostr (n_units, umax_buf)));
+    }
 
-	if (have_read_stdin && close (STDIN_FILENO) < 0)
-		error (EXIT_FAILURE, errno, "-");
+  file_list = (optind < argc
+               ? (char const *const *) &argv[optind]
+               : default_file_list);
 
-	exit (ok ? EXIT_SUCCESS : EXIT_FAILURE);
+  if (O_BINARY && ! isatty (STDOUT_FILENO))
+    xfreopen (NULL, "wb", stdout);
+
+  for (i = 0; file_list[i]; ++i)
+    ok &= head_file (file_list[i], n_units, count_lines, elide_from_end);
+
+  if (have_read_stdin && close (STDIN_FILENO) < 0)
+    die (EXIT_FAILURE, errno, "-");
+
+  return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

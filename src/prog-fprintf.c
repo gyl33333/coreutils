@@ -1,5 +1,5 @@
 /* prog-fprintf.c - common formating output functions and definitions
-   Copyright (C) 2008-2013 Free Software Foundation, Inc.
+   Copyright (C) 2008-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -27,11 +27,11 @@
 void
 prog_fprintf (FILE *fp, char const *fmt, ...)
 {
-	va_list ap;
-	fputs (program_name, fp);
-	fputs (": ", fp);
-	va_start (ap, fmt);
-	vfprintf (fp, fmt, ap);
-	va_end (ap);
-	fputc ('\n', fp);
+  va_list ap;
+  fputs (program_name, fp);
+  fputs (": ", fp);
+  va_start (ap, fmt);
+  vfprintf (fp, fmt, ap);
+  va_end (ap);
+  fputc ('\n', fp);
 }

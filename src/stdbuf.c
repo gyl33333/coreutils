@@ -1,5 +1,5 @@
 /* stdbuf -- setup the standard streams for a command
-   Copyright (C) 2009-2013 Free Software Foundation, Inc.
+   Copyright (C) 2009-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #include <assert.h>
 
 #include "system.h"
+#include "die.h"
 #include "error.h"
 #include "filenamecat.h"
 #include "quote.h"
@@ -34,23 +35,25 @@
 #define PROGRAM_NAME "stdbuf"
 #define LIB_NAME "libstdbuf.so" /* FIXME: don't hardcode  */
 
-#define AUTHORS proper_name_utf8 ("Padraig Brady", "P\303\241draig Brady")
+#define AUTHORS proper_name ("Padraig Brady")
 
 static char *program_path;
 
-static struct {
-	size_t size;
-	int optc;
-	char *optarg;
+static struct
+{
+  size_t size;
+  int optc;
+  char *optarg;
 } stdbuf[3];
 
-static struct option const longopts[] = {
-	{"input", required_argument, NULL, 'i'},
-	{"output", required_argument, NULL, 'o'},
-	{"error", required_argument, NULL, 'e'},
-	{GETOPT_HELP_OPTION_DECL},
-	{GETOPT_VERSION_OPTION_DECL},
-	{NULL, 0, NULL, 0}
+static struct option const longopts[] =
+{
+  {"input", required_argument, NULL, 'i'},
+  {"output", required_argument, NULL, 'o'},
+  {"error", required_argument, NULL, 'e'},
+  {GETOPT_HELP_OPTION_DECL},
+  {GETOPT_VERSION_OPTION_DECL},
+  {NULL, 0, NULL, 0}
 };
 
 /* Set size to the value of STR, interpreted as a decimal integer,
@@ -62,62 +65,64 @@ static struct option const longopts[] = {
 static int
 parse_size (char const *str, size_t *size)
 {
-	uintmax_t tmp_size;
-	enum strtol_error e = xstrtoumax (str, NULL, 10, &tmp_size, "EGkKMPTYZ0");
-	if (e == LONGINT_OK && tmp_size > SIZE_MAX)
-		e = LONGINT_OVERFLOW;
+  uintmax_t tmp_size;
+  enum strtol_error e = xstrtoumax (str, NULL, 10, &tmp_size, "EGkKMPTYZ0");
+  if (e == LONGINT_OK && SIZE_MAX < tmp_size)
+    e = LONGINT_OVERFLOW;
 
-	if (e == LONGINT_OK) {
-		errno = 0;
-		*size = tmp_size;
-		return 0;
-	}
+  if (e == LONGINT_OK)
+    {
+      errno = 0;
+      *size = tmp_size;
+      return 0;
+    }
 
-	errno = (e == LONGINT_OVERFLOW ? EOVERFLOW : 0);
-	return -1;
+  errno = (e == LONGINT_OVERFLOW ? EOVERFLOW : errno);
+  return -1;
 }
 
 void
 usage (int status)
 {
-	if (status != EXIT_SUCCESS)
-		emit_try_help ();
-	else {
-		printf (_("Usage: %s OPTION... COMMAND\n"), program_name);
-		fputs (_("\
+  if (status != EXIT_SUCCESS)
+    emit_try_help ();
+  else
+    {
+      printf (_("Usage: %s OPTION... COMMAND\n"), program_name);
+      fputs (_("\
 Run COMMAND, with modified buffering operations for its standard streams.\n\
 "), stdout);
 
-		emit_mandatory_arg_note ();
+      emit_mandatory_arg_note ();
 
-		fputs (_("\
+      fputs (_("\
   -i, --input=MODE   adjust standard input stream buffering\n\
   -o, --output=MODE  adjust standard output stream buffering\n\
   -e, --error=MODE   adjust standard error stream buffering\n\
 "), stdout);
-		fputs (HELP_OPTION_DESCRIPTION, stdout);
-		fputs (VERSION_OPTION_DESCRIPTION, stdout);
-		fputs (_("\n\
+      fputs (HELP_OPTION_DESCRIPTION, stdout);
+      fputs (VERSION_OPTION_DESCRIPTION, stdout);
+      fputs (_("\n\
 If MODE is 'L' the corresponding stream will be line buffered.\n\
 This option is invalid with standard input.\n"), stdout);
-		fputs (_("\n\
+      fputs (_("\n\
 If MODE is '0' the corresponding stream will be unbuffered.\n\
 "), stdout);
-		fputs (_("\n\
+      fputs (_("\n\
 Otherwise MODE is a number which may be followed by one of the following:\n\
 KB 1000, K 1024, MB 1000*1000, M 1024*1024, and so on for G, T, P, E, Z, Y.\n\
 In this case the corresponding stream will be fully buffered with the buffer\n\
 size set to MODE bytes.\n\
 "), stdout);
-		fputs (_("\n\
+      fputs (_("\n\
 NOTE: If COMMAND adjusts the buffering of its standard streams ('tee' does\n\
-for e.g.) then that will override corresponding settings changed by 'stdbuf'.\n\
+for example) then that will override corresponding changes by 'stdbuf'.\n\
 Also some filters (like 'dd' and 'cat' etc.) don't use streams for I/O,\n\
 and are thus unaffected by 'stdbuf' settings.\n\
 "), stdout);
-		emit_ancillary_info ();
-	}
-	exit (status);
+      emit_ancillary_info (PROGRAM_NAME);
+    }
+  exit (status);
 }
 
 /* argv[0] can be anything really, but generally it contains
@@ -129,219 +134,261 @@ and are thus unaffected by 'stdbuf' settings.\n\
 static void
 set_program_path (const char *arg)
 {
-	if (strchr (arg, '/')) {      /* Use absolute or relative paths directly.  */
-		program_path = dir_name (arg);
-	} else {
-		char *path = xreadlink ("/proc/self/exe");
-		if (path)
-			program_path = dir_name (path);
-		else if ((path = getenv ("PATH"))) {
-			char *dir;
-			path = xstrdup (path);
-			for (dir = strtok (path, ":"); dir != NULL; dir = strtok (NULL, ":")) {
-				char *candidate = file_name_concat (dir, arg, NULL);
-				if (access (candidate, X_OK) == 0) {
-					program_path = dir_name (candidate);
-					free (candidate);
-					break;
-				}
-				free (candidate);
-			}
-		}
-		free (path);
-	}
+  if (strchr (arg, '/'))        /* Use absolute or relative paths directly.  */
+    {
+      program_path = dir_name (arg);
+    }
+  else
+    {
+      char *path = xreadlink ("/proc/self/exe");
+      if (path)
+        program_path = dir_name (path);
+      else if ((path = getenv ("PATH")))
+        {
+          char *dir;
+          path = xstrdup (path);
+          for (dir = strtok (path, ":"); dir != NULL; dir = strtok (NULL, ":"))
+            {
+              char *candidate = file_name_concat (dir, arg, NULL);
+              if (access (candidate, X_OK) == 0)
+                {
+                  program_path = dir_name (candidate);
+                  free (candidate);
+                  break;
+                }
+              free (candidate);
+            }
+        }
+      free (path);
+    }
 }
 
 static int
 optc_to_fileno (int c)
 {
-	int ret = -1;
+  int ret = -1;
 
-	switch (c) {
-	case 'e':
-		ret = STDERR_FILENO;
-		break;
-	case 'i':
-		ret = STDIN_FILENO;
-		break;
-	case 'o':
-		ret = STDOUT_FILENO;
-		break;
-	}
+  switch (c)
+    {
+    case 'e':
+      ret = STDERR_FILENO;
+      break;
+    case 'i':
+      ret = STDIN_FILENO;
+      break;
+    case 'o':
+      ret = STDOUT_FILENO;
+      break;
+    }
 
-	return ret;
+  return ret;
 }
 
 static void
 set_LD_PRELOAD (void)
 {
-	int ret;
-	char *old_libs = getenv ("LD_PRELOAD");
-	char *LD_PRELOAD;
+  int ret;
+#ifdef __APPLE__
+  char const *preload_env = "DYLD_INSERT_LIBRARIES";
+#else
+  char const *preload_env = "LD_PRELOAD";
+#endif
+  char *old_libs = getenv (preload_env);
+  char *LD_PRELOAD;
 
-	/* Note this would auto add the appropriate search path for "libstdbuf.so":
-	   gcc stdbuf.c -Wl,-rpath,'$ORIGIN' -Wl,-rpath,$PKGLIBEXECDIR
-	   However we want the lookup done for the exec'd command not stdbuf.
+  /* Note this would auto add the appropriate search path for "libstdbuf.so":
+     gcc stdbuf.c -Wl,-rpath,'$ORIGIN' -Wl,-rpath,$PKGLIBEXECDIR
+     However we want the lookup done for the exec'd command not stdbuf.
 
-	   Since we don't link against libstdbuf.so add it to PKGLIBEXECDIR
-	   rather than to LIBDIR.  */
-	char const *const search_path[] = {
-		program_path,
-		PKGLIBEXECDIR,
-		NULL
-	};
+     Since we don't link against libstdbuf.so add it to PKGLIBEXECDIR
+     rather than to LIBDIR.
 
-	char const *const *path = search_path;
-	char *libstdbuf;
+     Note we could add "" as the penultimate item in the following list
+     to enable searching for libstdbuf.so in the default system lib paths.
+     However that would not indicate an error if libstdbuf.so was not found.
+     Also while this could support auto selecting the right arch in a multilib
+     environment, what we really want is to auto select based on the arch of the
+     command being run, rather than that of stdbuf itself.  This is currently
+     not supported due to the unusual need for controlling the stdio buffering
+     of programs that are a different architecture to the default on the
+     system (and that of stdbuf itself).  */
+  char const *const search_path[] = {
+    program_path,
+    PKGLIBEXECDIR,
+    NULL
+  };
 
-	while (true) {
-		struct stat sb;
+  char const *const *path = search_path;
+  char *libstdbuf;
 
-		if (!**path) {            /* system default  */
-			libstdbuf = xstrdup (LIB_NAME);
-			break;
-		}
-		ret = asprintf (&libstdbuf, "%s/%s", *path, LIB_NAME);
-		if (ret < 0)
-			xalloc_die ();
-		if (stat (libstdbuf, &sb) == 0)   /* file_exists  */
-			break;
-		free (libstdbuf);
+  while (true)
+    {
+      struct stat sb;
 
-		++path;
-		if ( ! *path)
-			error (EXIT_CANCELED, 0, _("failed to find %s"), quote (LIB_NAME));
-	}
+      if (!**path)              /* system default  */
+        {
+          libstdbuf = xstrdup (LIB_NAME);
+          break;
+        }
+      ret = asprintf (&libstdbuf, "%s/%s", *path, LIB_NAME);
+      if (ret < 0)
+        xalloc_die ();
+      if (stat (libstdbuf, &sb) == 0)   /* file_exists  */
+        break;
+      free (libstdbuf);
 
-	/* FIXME: Do we need to support libstdbuf.dll, c:, '\' separators etc?  */
+      ++path;
+      if ( ! *path)
+        die (EXIT_CANCELED, 0, _("failed to find %s"), quote (LIB_NAME));
+    }
 
-	if (old_libs)
-		ret = asprintf (&LD_PRELOAD, "LD_PRELOAD=%s:%s", old_libs, libstdbuf);
-	else
-		ret = asprintf (&LD_PRELOAD, "LD_PRELOAD=%s", libstdbuf);
+  /* FIXME: Do we need to support libstdbuf.dll, c:, '\' separators etc?  */
 
-	if (ret < 0)
-		xalloc_die ();
+  if (old_libs)
+    ret = asprintf (&LD_PRELOAD, "%s=%s:%s", preload_env, old_libs, libstdbuf);
+  else
+    ret = asprintf (&LD_PRELOAD, "%s=%s", preload_env, libstdbuf);
 
-	free (libstdbuf);
+  if (ret < 0)
+    xalloc_die ();
 
-	ret = putenv (LD_PRELOAD);
+  free (libstdbuf);
 
-	if (ret != 0) {
-		error (EXIT_CANCELED, errno,
-			   _("failed to update the environment with %s"),
-			   quote (LD_PRELOAD));
-	}
+  ret = putenv (LD_PRELOAD);
+#ifdef __APPLE__
+  if (ret == 0)
+    ret = setenv ("DYLD_FORCE_FLAT_NAMESPACE", "y", 1);
+#endif
+
+  if (ret != 0)
+    {
+      die (EXIT_CANCELED, errno,
+           _("failed to update the environment with %s"),
+           quote (LD_PRELOAD));
+    }
 }
 
-/* Populate environ with _STDBUF_I=$MODE _STDBUF_O=$MODE _STDBUF_E=$MODE  */
+/* Populate environ with _STDBUF_I=$MODE _STDBUF_O=$MODE _STDBUF_E=$MODE.
+   Return TRUE if any environment variables set.   */
 
-static void
+static bool
 set_libstdbuf_options (void)
 {
-	unsigned int i;
+  bool env_set = false;
+  size_t i;
 
-	for (i = 0; i < ARRAY_CARDINALITY (stdbuf); i++) {
-		if (stdbuf[i].optarg) {
-			char *var;
-			int ret;
+  for (i = 0; i < ARRAY_CARDINALITY (stdbuf); i++)
+    {
+      if (stdbuf[i].optarg)
+        {
+          char *var;
+          int ret;
 
-			if (*stdbuf[i].optarg == 'L')
-				ret = asprintf (&var, "%s%c=L", "_STDBUF_",
-								toupper (stdbuf[i].optc));
-			else
-				ret = asprintf (&var, "%s%c=%" PRIuMAX, "_STDBUF_",
-								toupper (stdbuf[i].optc),
-								(uintmax_t) stdbuf[i].size);
-			if (ret < 0)
-				xalloc_die ();
+          if (*stdbuf[i].optarg == 'L')
+            ret = asprintf (&var, "%s%c=L", "_STDBUF_",
+                            toupper (stdbuf[i].optc));
+          else
+            ret = asprintf (&var, "%s%c=%" PRIuMAX, "_STDBUF_",
+                            toupper (stdbuf[i].optc),
+                            (uintmax_t) stdbuf[i].size);
+          if (ret < 0)
+            xalloc_die ();
 
-			if (putenv (var) != 0) {
-				error (EXIT_CANCELED, errno,
-					   _("failed to update the environment with %s"),
-					   quote (var));
-			}
-		}
-	}
+          if (putenv (var) != 0)
+            {
+              die (EXIT_CANCELED, errno,
+                   _("failed to update the environment with %s"),
+                   quote (var));
+            }
+
+          env_set = true;
+        }
+    }
+
+  return env_set;
 }
 
 int
 main (int argc, char **argv)
 {
-	int c;
+  int c;
 
-	initialize_main (&argc, &argv);
-	set_program_name (argv[0]);
-	setlocale (LC_ALL, "");
-	bindtextdomain (PACKAGE, LOCALEDIR);
-	textdomain (PACKAGE);
+  initialize_main (&argc, &argv);
+  set_program_name (argv[0]);
+  setlocale (LC_ALL, "");
+  bindtextdomain (PACKAGE, LOCALEDIR);
+  textdomain (PACKAGE);
 
-	initialize_exit_failure (EXIT_CANCELED);
-	atexit (close_stdout);
+  initialize_exit_failure (EXIT_CANCELED);
+  atexit (close_stdout);
 
-	while ((c = getopt_long (argc, argv, "+i:o:e:", longopts, NULL)) != -1) {
-		int opt_fileno;
+  while ((c = getopt_long (argc, argv, "+i:o:e:", longopts, NULL)) != -1)
+    {
+      int opt_fileno;
 
-		switch (c) {
-		/* Old McDonald had a farm ei...  */
-		case 'e':
-		case 'i':
-		case 'o':
-			opt_fileno = optc_to_fileno (c);
-			assert (0 <= opt_fileno && opt_fileno < ARRAY_CARDINALITY (stdbuf));
-			stdbuf[opt_fileno].optc = c;
-			while (c_isspace (*optarg))
-				optarg++;
-			stdbuf[opt_fileno].optarg = optarg;
-			if (c == 'i' && *optarg == 'L') {
-				/* -oL will be by far the most common use of this utility,
-				   but one could easily think -iL might have the same affect,
-				   so disallow it as it could be confusing.  */
-				error (0, 0, _("line buffering stdin is meaningless"));
-				usage (EXIT_CANCELED);
-			}
+      switch (c)
+        {
+        /* Old McDonald had a farm ei...  */
+        case 'e':
+        case 'i':
+        case 'o':
+          opt_fileno = optc_to_fileno (c);
+          assert (0 <= opt_fileno && opt_fileno < ARRAY_CARDINALITY (stdbuf));
+          stdbuf[opt_fileno].optc = c;
+          while (c_isspace (*optarg))
+            optarg++;
+          stdbuf[opt_fileno].optarg = optarg;
+          if (c == 'i' && *optarg == 'L')
+            {
+              /* -oL will be by far the most common use of this utility,
+                 but one could easily think -iL might have the same affect,
+                 so disallow it as it could be confusing.  */
+              error (0, 0, _("line buffering stdin is meaningless"));
+              usage (EXIT_CANCELED);
+            }
 
-			if (!STREQ (optarg, "L")
-				&& parse_size (optarg, &stdbuf[opt_fileno].size) == -1)
-				error (EXIT_CANCELED, errno, _("invalid mode %s"), quote (optarg));
+          if (!STREQ (optarg, "L")
+              && parse_size (optarg, &stdbuf[opt_fileno].size) == -1)
+            die (EXIT_CANCELED, errno, _("invalid mode %s"), quote (optarg));
 
-			break;
+          break;
 
-			case_GETOPT_HELP_CHAR;
+        case_GETOPT_HELP_CHAR;
 
-			case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
+        case_GETOPT_VERSION_CHAR (PROGRAM_NAME, AUTHORS);
 
-		default:
-			usage (EXIT_CANCELED);
-		}
-	}
+        default:
+          usage (EXIT_CANCELED);
+        }
+    }
 
-	argv += optind;
-	argc -= optind;
+  argv += optind;
+  argc -= optind;
 
-	/* must specify at least 1 command.  */
-	if (argc < 1) {
-		error (0, 0, _("missing operand"));
-		usage (EXIT_CANCELED);
-	}
+  /* must specify at least 1 command.  */
+  if (argc < 1)
+    {
+      error (0, 0, _("missing operand"));
+      usage (EXIT_CANCELED);
+    }
 
-	/* FIXME: Should we mandate at least one option?  */
+  if (! set_libstdbuf_options ())
+    {
+      error (0, 0, _("you must specify a buffering mode option"));
+      usage (EXIT_CANCELED);
+    }
 
-	set_libstdbuf_options ();
+  /* Try to preload libstdbuf first from the same path as
+     stdbuf is running from.  */
+  set_program_path (program_name);
+  if (!program_path)
+    program_path = xstrdup (PKGLIBDIR);  /* Need to init to non-NULL.  */
+  set_LD_PRELOAD ();
+  free (program_path);
 
-	/* Try to preload libstdbuf first from the same path as
-	   stdbuf is running from.  */
-	set_program_path (program_name);
-	if (!program_path)
-		program_path = xstrdup (PKGLIBDIR);  /* Need to init to non NULL.  */
-	set_LD_PRELOAD ();
-	free (program_path);
+  execvp (*argv, argv);
 
-	execvp (*argv, argv);
-
-	{
-		int exit_status = (errno == ENOENT ? EXIT_ENOENT : EXIT_CANNOT_INVOKE);
-		error (0, errno, _("failed to run command %s"), quote (argv[0]));
-		exit (exit_status);
-	}
+  int exit_status = errno == ENOENT ? EXIT_ENOENT : EXIT_CANNOT_INVOKE;
+  error (0, errno, _("failed to run command %s"), quote (argv[0]));
+  return exit_status;
 }
