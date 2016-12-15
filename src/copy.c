@@ -365,7 +365,7 @@ sparse_copy (int src_fd, int dest_fd, char *buf, size_t buf_size,
 		  strncat(progress_show, src_name, strlen(src_name));
 
 		  /* print the field */
-		  printf ("\033[?25l \033[K%s\n", progress_show);
+		  printf ("\033[?25l\033[K%s\n", progress_show);
 		  printf ("\r\033[1A");
 
 		  fflush (stdout);
