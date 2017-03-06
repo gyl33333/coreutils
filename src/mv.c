@@ -491,7 +491,7 @@ main (int argc, char **argv)
 			/* call du -s for each file */
 			/* create command */
 			char command[1024];
-			sprintf ( command, "du -s \"%s\"", file[j] );
+			sprintf ( command, "du -b \"%s\"", file[j] );
 			/* TODO: replace all quote signs in file[i] */
 
 			FILE *fp;
@@ -499,12 +499,10 @@ main (int argc, char **argv)
 
 			/* run command */
 			fp = popen(command, "r");
-			if (fp == NULL || fgets(output, sizeof(output) - 1, fp) == NULL) {
-				printf("failed to run du.\n" );
-			} else {
+			if (fp == NULL || fgets(output, sizeof(output) - 1, fp) != NULL) {
 				/* isolate size */
 				strchr ( output, '\t' )[0] = '\0';
-				gtotal_size += atol ( output );
+				gtotal_size = atol ( output ) / 1024;
 			}
 
 			/* close */
