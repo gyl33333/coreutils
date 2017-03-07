@@ -627,7 +627,7 @@ do_copy (int n_files, char **file, const char *target_directory,
 		  /* call du -s for each file */
 		  /* create command */
 		  char command[1024];
-		  sprintf ( command, "du -b \"%s\"", file[j] );
+		  sprintf ( command, "du -sb \"%s\"", file[j] );
 		  /* TODO: replace all quote signs in file[i] */
 
 		  FILE *fp;
