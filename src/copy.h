@@ -292,7 +292,7 @@ void cp_options_default (struct cp_options *);
 bool chown_failure_ok (struct cp_options const *) _GL_ATTRIBUTE_PURE;
 mode_t cached_umask (void);
 /* progress start */
-int file_size_format ( char * dest, long long int size, int count);
+int file_size_format ( char * dest, long long int size);
 
 long long int gtotal_size;
 long long gtotal_written;

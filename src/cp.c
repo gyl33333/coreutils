@@ -638,7 +638,7 @@ do_copy (int n_files, char **file, const char *target_directory,
 		  if (fp == NULL || fgets(output, sizeof(output) - 1, fp) != NULL) {
 			  /* isolate size */
 			  strchr ( output, '\t' )[0] = '\0';
-			  gtotal_size = atol ( output ) / 1024;
+			  gtotal_size = atol ( output );
 		  }
 
 		  /* close */

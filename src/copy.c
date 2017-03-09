@@ -160,9 +160,9 @@ utimens_symlink (char const *file, struct timespec const *timespec)
 
 
 /* gprogress start */
-int file_size_format ( char * dest, long long int size, int count)
+int file_size_format ( char * dest, long long int size)
 {
-	int num = count;
+	int num = 0;
 	double hsize = ( double ) size;
 	while ( hsize >= 1000. ) {
 		hsize /= 1024.;
@@ -348,15 +348,15 @@ sparse_copy (int src_fd, int dest_fd, char *buf, size_t buf_size,
 
 	  /* gprogress start */
 	  if (gprogress) {
-		  gtotal_written += csize / 1024;
+		  gtotal_written += csize;
 
 
-		  gtotal_percent = gtotal_written *100.F / gtotal_size;
+		  gtotal_percent = gtotal_written * 100.F / gtotal_size;
 
 		  sprintf(progress_show, "[%.0LF%%][", gtotal_percent);
 
-		  file_size_format(iprogress_buf, gtotal_written, 1);
-		  file_size_format(total_buf,gtotal_size, 1);
+		  file_size_format(iprogress_buf, gtotal_written);
+		  file_size_format(total_buf,gtotal_size);
 		  strncat(progress_show, iprogress_buf, strlen(iprogress_buf));
 		  strcat(progress_show, "/");
 		  strncat(progress_show, total_buf, strlen(total_buf));
