@@ -331,6 +331,64 @@ If you specify more than one of -i, -f, -n, only the final one takes effect.\n\
   exit (status);
 }
 
+/* gprogress start */
+
+#define NAME_LEN 1024
+
+unsigned long long get_file_size(const char *path)
+{
+	unsigned long long filesize = -1;
+	struct stat statbuff;
+	if(stat(path, &statbuff) < 0) {
+		return filesize;
+	} else {
+		filesize = statbuff.st_size;
+	}
+	return filesize;
+}
+
+bool is_dir(const char *path)
+{
+	struct stat info;
+	stat(path, &info);
+	if(S_ISDIR(info.st_mode))
+		return true;
+	else
+		return false;
+}
+
+unsigned long long calculate_size(const char *path)
+{
+	DIR *dir;
+	struct dirent *ptr;
+	char file_path[NAME_LEN];
+	unsigned long long size = 0;
+
+	if (is_dir(path)) {
+
+		dir = opendir(path);
+		while ((ptr = readdir(dir)) != NULL) {
+			if ((strcmp(ptr->d_name, ".") == 0) || (strcmp(ptr->d_name, "..") == 0))
+				continue;
+
+			memset(file_path, 0, sizeof(file_path));
+			strncpy(file_path, path, strlen(path));
+			strcat(file_path, "/");
+			strcat(file_path, ptr->d_name);
+
+			if (DT_DIR == ptr->d_type)
+				size += calculate_size(file_path);
+			else
+				size += get_file_size(file_path);
+		}
+
+	} else
+		size = get_file_size(path);
+	return size;
+}
+
+/* gprogress end */
+
 int
 main (int argc, char **argv)
 {
@@ -484,30 +542,11 @@ main (int argc, char **argv)
 		gtotal_size = 0;
 
 		int ifiles = n_files;
-		if ( !target_directory )
-			ifiles = 1;
+		if ( ! target_directory )
+			ifiles = n_files - 1;
 		int j;
-		for (j = 0; j < ifiles; j++) {
-			/* call du -s for each file */
-			/* create command */
-			char command[1024];
-			sprintf ( command, "du -sb \"%s\"", file[j] );
-			/* TODO: replace all quote signs in file[i] */
-
-			FILE *fp;
-			char output[1024];
-
-			/* run command */
-			fp = popen(command, "r");
-			if (fp == NULL || fgets(output, sizeof(output) - 1, fp) != NULL) {
-				/* isolate size */
-				strchr ( output, '\t' )[0] = '\0';
-				gtotal_size = atol ( output );
-			}
-
-			/* close */
-			pclose(fp);
-		}
+		for (j = 0; j < ifiles; j++)
+			gtotal_size += calculate_size(file[j]);
 	}
 	/* gprogress end */
 

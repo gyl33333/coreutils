@@ -294,7 +294,7 @@ mode_t cached_umask (void);
 /* progress start */
 int file_size_format ( char * dest, long long int size);
 
-long long int gtotal_size;
+unsigned long long gtotal_size;
 long long gtotal_written;
 bool gprogress;
 /* progress end */
